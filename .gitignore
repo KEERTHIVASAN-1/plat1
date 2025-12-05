@@ -1,1 +1,4 @@
--e "node_modules/\n.env\n.DS_Store\n*.zip" 
+node_modules/ 
+.env 
+.DS_Store 
+*.zip 

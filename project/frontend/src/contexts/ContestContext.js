@@ -6,118 +6,57 @@ const ContestContext = createContext();
 export const useContest = () => useContext(ContestContext);
 
 export const ContestProvider = ({ children }) => {
-  const [roundInfo, setRoundInfo] = useState({
-    round1: {
-      id: "round1",
-      name: "Round 1",
-      status: "active",
-      isLocked: false,
-      startTime: new Date().toISOString(),
-      duration: 3600,
-      problems: [],
-    },
-    round2: {
-      id: "round2",
-      name: "Round 2",
-      status: "upcoming",
-      isLocked: true,
-      startTime: null,
-      duration: 5400,
-      problems: [],
-    },
-  });
+  const [roundInfo, setRoundInfo] = useState({});
   const [participants] = useState([]);
   const [submissions, setSubmissions] = useState([]);
 
   const getRoundInfo = (roundId) => roundInfo[roundId];
 
-  const applyRoundUpdate = (updater) => {
-    setRoundInfo((prev) => {
-      const next = updater(prev);
-      try { localStorage.setItem("roundInfo", JSON.stringify(next)); } catch (_) {}
-      return next;
-    });
-  };
-
   const updateRoundStatus = (roundId, status) => {
-    applyRoundUpdate((prev) => ({
+    setRoundInfo((prev) => ({
       ...prev,
       [roundId]: { ...prev[roundId], status },
     }));
   };
 
   const startRound = (roundId) => {
-    applyRoundUpdate((prev) => ({
+    setRoundInfo((prev) => ({
       ...prev,
       [roundId]: {
         ...prev[roundId],
         status: "active",
-        startTime: new Date().toISOString(),
         isLocked: false,
       },
     }));
   };
 
   const lockRound = (roundId) =>
-    applyRoundUpdate((prev) => ({
+    setRoundInfo((prev) => ({
       ...prev,
       [roundId]: { ...prev[roundId], isLocked: true },
     }));
 
   const unlockRound = (roundId) =>
-    applyRoundUpdate((prev) => ({
+    setRoundInfo((prev) => ({
       ...prev,
       [roundId]: { ...prev[roundId], isLocked: false },
     }));
-
-  const updateRoundDuration = (roundId, minutes) => {
-    const durationSeconds = Math.max(1, Math.floor((Number(minutes) || 0) * 60));
-    applyRoundUpdate((prev) => ({
-      ...prev,
-      [roundId]: { ...prev[roundId], duration: durationSeconds },
-    }));
-  };
-
-  const restartRound = (roundId) => {
-    applyRoundUpdate((prev) => ({
-      ...prev,
-      [roundId]: {
-        ...prev[roundId],
-        status: "active",
-        startTime: new Date().toISOString(),
-        isLocked: false,
-      },
-    }));
-  };
 
   // ===============================
   // 🔥 RUN CODE FIXED
   // ===============================
   const runCode = async (code, language, customInput) => {
     try {
-      const payload = { code, language, customInput, stdin: customInput, input: customInput };
+      const payload = { code, language, customInput };
       const { data } = await api.runCode(payload);
-
       if (!data?.success) {
-        return {
-          success: false,
-          output: data?.error || "Run failed",
-        };
+        return { success: false, output: data?.error || "Run failed" };
       }
-
-      const run = data.run || {};
-
-      return {
-        success: true,
-        output: run.stdout || run.output || data.output || "",
-        executionTime: run.cpu_time || run.time || 0,
-      };
+      const output = data?.output ?? data?.run?.output ?? data?.run?.stdout ?? "";
+      const executionTime = data?.time ?? data?.run?.cpu_time ?? 0;
+      return { success: true, output, executionTime };
     } catch (err) {
-      console.error("runCode error:", err);
-      return {
-        success: false,
-        output: "Run error: " + (err.message || err),
-      };
+      return { success: false, output: "Run error: " + (err.message || err) };
     }
   };
 
@@ -128,25 +67,14 @@ export const ContestProvider = ({ children }) => {
     try {
       const payload = { userId, problemId, code, language, round: roundId };
       const { data } = await api.submitCode(payload);
-
-      if (!data?.success) {
-        return {
-          success: false,
-          message: data?.message || "Submission failed",
-        };
+      if (!data || !data.id) {
+        return { success: false, message: "Submission failed" };
       }
-
-      // refresh submissions
       const { data: subs } = await api.getUserSubmissions(userId);
       setSubmissions(subs || []);
-
-      return { success: true, submission: data?.result };
+      return { success: true, submission: data };
     } catch (err) {
-      console.error("submitCode error:", err);
-      return {
-        success: false,
-        message: err.message || "Submission error",
-      };
+      return { success: false, message: err.message || "Submission error" };
     }
   };
 
@@ -166,21 +94,16 @@ export const ContestProvider = ({ children }) => {
             id,
             name: id === "round1" ? "Round 1" : "Round 2",
           };
-          if (!base.status || base.status === "scheduled") {
-            base.status = "active";
-            base.startTime = new Date().toISOString();
-            base.isLocked = false;
-            base.duration = base.duration || 3600;
-          }
+          // keep backend-provided status and timing as-is
           next[id] = base;
         } catch (_) {
           next[id] = {
             id,
             name: id === "round1" ? "Round 1" : "Round 2",
-            status: "active",
-            isLocked: false,
-            startTime: new Date().toISOString(),
-            duration: 3600,
+            status: "scheduled",
+            isLocked: true,
+            startTime: null,
+            endTime: null,
           };
         }
       }
@@ -202,25 +125,39 @@ export const ContestProvider = ({ children }) => {
           status: "upcoming",
           isLocked: true,
           startTime: null,
-          duration: 5400,
+          endTime: null,
           problems: [],
         };
       }
 
-      try {
-        const saved = localStorage.getItem("roundInfo");
-        if (saved) {
-          const savedObj = JSON.parse(saved);
-          for (const key of Object.keys(savedObj || {})) {
-            next[key] = { ...(next[key] || {}), ...(savedObj[key] || {}) };
-          }
-        }
-      } catch (_) {}
       setRoundInfo(next);
     }
 
     bootstrap();
   }, []);
+
+  // Poll round window periodically so participants see admin changes
+  useEffect(() => {
+    let mounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const ids = Object.keys(roundInfo);
+        const updated = { ...roundInfo };
+        for (const id of ids) {
+          const { data } = await api.getRoundWindow(id);
+          updated[id] = {
+            ...(updated[id] || {}),
+            ...(data || {}),
+          };
+        }
+        if (mounted) setRoundInfo(updated);
+      } catch (_) {}
+    }, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [roundInfo]);
 
   return (
     <ContestContext.Provider
@@ -233,8 +170,6 @@ export const ContestProvider = ({ children }) => {
         startRound,
         lockRound,
         unlockRound,
-        updateRoundDuration,
-        restartRound,
         runCode,
         submitCode,
       }}

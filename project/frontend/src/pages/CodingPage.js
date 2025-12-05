@@ -17,6 +17,7 @@ import { toast } from '../hooks/use-toast';
 import { Code2, Play, Send, AlertCircle } from 'lucide-react';
 import { languageOptions } from '../mock';
 import { api } from '../utils/api';
+import { Alert, AlertDescription } from '../components/ui/alert';
 
 const BACKEND =
   process.env.REACT_APP_BACKEND_URL ||
@@ -44,9 +45,7 @@ const CodingPage = () => {
   const [testcaseResults, setTestcaseResults] = useState([]);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [timeExpired, setTimeExpired] = useState(false);
-  const [showTimeUpModal, setShowTimeUpModal] = useState(false);
-  const [currentProblemDetail, setCurrentProblemDetail] = useState(null);
+  const [expired, setExpired] = useState(false);
 
   const problemsRef = useRef(problems);
 
@@ -82,7 +81,7 @@ const CodingPage = () => {
   }, [roundId]);
 
   useEffect(() => {
-    if (!roundData || roundData.status !== "active") {
+    if (!roundData || (roundData.status !== "active" && roundData.status !== "completed")) {
       navigate("/dashboard");
     }
   }, [roundData, navigate]);
@@ -95,84 +94,45 @@ const CodingPage = () => {
   }, [language]);
 
   useEffect(() => {
-    const loadProblemDetail = async () => {
+    const tick = () => {
       try {
-        if (!selectedProblemId) { setCurrentProblemDetail(null); return; }
-        const { data } = await api.getProblem(selectedProblemId);
-        const detail = data?.problem || data || null;
-        setCurrentProblemDetail(detail);
-      } catch (_) {
-        setCurrentProblemDetail(null);
-      }
+        const end = roundData?.endTime ? new Date(roundData.endTime).getTime() : null;
+        if (!end) { setExpired(false); return; }
+        setExpired(Date.now() > end);
+      } catch (_) { setExpired(false); }
     };
-    loadProblemDetail();
-  }, [selectedProblemId]);
-
-  const handleTimeUp = () => {
-    setTimeExpired(true);
-    setShowTimeUpModal(true);
-  };
+    tick();
+    const i = setInterval(tick, 1000);
+    return () => clearInterval(i);
+  }, [roundData?.endTime]);
 
   const handleRun = async () => {
     setIsRunning(true);
     setRunOutput('Running...');
     try {
-      if (language === 'java' && !/public\s+static\s+void\s+main\s*\(/.test(code)) {
-        toast({ title: "Java entrypoint missing", description: "Add public static void main(String[] args) and print the result" , variant: "destructive" });
+      const currentProblem = problems.find(p => (p._id || p.id) === selectedProblemId) || problems[0];
+      if (!currentProblem) {
+        toast({ title: "Select a problem", variant: "destructive" });
+        setIsRunning(false);
+        return;
       }
-      const cases = (currentProblemDetail?.testcases || currentProblem?.testcases || []).slice();
-      if (!cases.length) {
-        const res = await runCode(code, language, customInput);
-        if (res && res.success) {
-          setRunOutput(res.output || "No Output");
-          toast({ title: "Run Success", description: `Executed` });
-        } else {
-          setRunOutput(res?.output || "Execution Failed");
-        }
+      const payload = {
+        userId: user?.id,
+        problemId: currentProblem._id || currentProblem.id,
+        code,
+        language,
+        round: roundId,
+      };
+      const { data } = await api.testCode(payload);
+      if (!data?.success) {
+        setRunOutput("Execution Failed");
         setTestcaseResults([]);
       } else {
-        const results = [];
-        const injectInput = (lang, src, inp) => {
-          try {
-            const json = JSON.stringify(String(inp || ''));
-            if (lang === 'python') {
-              return `import sys, io\nsys.stdin = io.StringIO(${json})\n` + src;
-            }
-            if (lang === 'javascript') {
-              return `const fs = require('fs');\nconst __DATA = ${json};\nconst __read = fs.readFileSync;\nfs.readFileSync = function(p, enc){ if(p===0){ return enc==='utf8' ? __DATA : Buffer.from(__DATA); } return __read.apply(fs, arguments); };\n` + src;
-            }
-            return src; // cpp/java rely on stdin via runner
-          } catch (_) { return src; }
-        };
-        for (let i = 0; i < cases.length; i++) {
-          const tc = cases[i] || {};
-          const input = tc.input || tc.stdin || '';
-          const expected = tc.expectedOutput || tc.output || tc.expected || '';
-          let out = '';
-          let ok = false;
-          try {
-            const codeToRun = injectInput(language, code, input);
-            const res = await runCode(codeToRun, language, ['cpp','java'].includes(language) ? input : '');
-            out = (res && res.success) ? (res.output || '') : (res?.output || '');
-            const norm = (s) => (s || '').toString().replace(/\r\n/g, '\n').trim();
-            ok = norm(out) === norm(expected);
-          } catch (e) {
-            out = 'Runtime error: ' + (e?.message || e);
-            ok = false;
-          }
-          results.push({
-            passed: ok,
-            testcase: tc.name || tc.id || (i + 1),
-            hidden: !!tc.hidden,
-            input: input,
-            expectedOutput: expected,
-            actualOutput: out,
-          });
-        }
-        const passCount = results.filter(r => r.passed).length;
-        setTestcaseResults(results);
-        setRunOutput(`${passCount}/${results.length} testcases passed`);
-        toast({ title: "Run Completed", description: `${passCount}/${results.length} passed` });
+        setTestcaseResults(data.results || []);
+        const passed = data.passed || 0;
+        const total = data.total || (data.results || []).length;
+        setRunOutput(`Passed ${passed}/${total}`);
+        toast({ title: "Run completed", description: `Passed ${passed}/${total}` });
       }
     } catch (err) {
       console.error(err);
@@ -257,13 +217,23 @@ const CodingPage = () => {
         </div>
 
         <div className="flex items-center space-x-4">
-          <Timer startTime={roundData?.startTime} duration={roundData?.duration} endTime={roundData?.endTime} onTimeUp={handleTimeUp} />
-          <Button onClick={handleSubmit} disabled={isSubmitting || timeExpired} className="bg-green-600 hover:bg-green-700">
+          <Timer startTime={roundData?.startTime} endTime={roundData?.endTime} status={roundData?.status} />
+          <Button onClick={handleSubmit} disabled={isSubmitting || expired} className="bg-green-600 hover:bg-green-700">
             <Send className="h-4 w-4 mr-2" /> {isSubmitting ? "Submitting..." : "Submit"}
           </Button>
           <Button variant="outline" onClick={() => navigate("/dashboard")}>Exit</Button>
         </div>
       </div>
+
+      {roundData?.status === 'active' && (
+        <div className="bg-green-50 border-b border-green-200">
+          <div className="max-w-7xl mx-auto px-4 py-2">
+            <Alert className="bg-green-50 border-green-200 text-green-800">
+              <AlertDescription>Round is active. Work continues and timer is ticking.</AlertDescription>
+            </Alert>
+          </div>
+        </div>
+      )}
 
       {/* BODY */}
       <div className="flex-1 flex overflow-hidden">
@@ -294,56 +264,13 @@ const CodingPage = () => {
 
           <ScrollArea className="flex-1 p-4">
             {currentProblem ? (
-              (() => {
-                const detail = currentProblemDetail || currentProblem;
-                const desc = detail.description || detail.statement || "No description available";
-                const cases = detail.testcases || [];
-                const openCase = cases.find(tc => !tc.hidden) || cases[0];
-                const exampleInput = (detail.example && (detail.example.input || detail.example.stdin)) || (openCase && (openCase.input || openCase.stdin)) || "";
-                const exampleOutput = (detail.example && (detail.example.expectedOutput || detail.example.output || detail.example.expected)) || (openCase && (openCase.expectedOutput || openCase.output || openCase.expected)) || "";
-                const constraints = detail.constraints;
-                return (
-                  <div>
-                    <h3 className="text-lg font-bold mb-2">{detail.title}</h3>
-                    <Badge className="mb-4">{detail.difficulty || "easy"}</Badge>
-                    <div className="space-y-4 text-sm text-gray-700">
-                      <div>
-                        {desc}
-                      </div>
-                      {(exampleInput || exampleOutput) && (
-                        <div className="p-3 bg-gray-50 rounded border">
-                          <div className="font-medium mb-2">Real-world Example</div>
-                          {exampleInput && (
-                            <div className="mb-2">
-                              <span className="font-medium text-gray-600">Input:</span>
-                              <pre className="mt-1 p-2 bg-white rounded text-xs overflow-x-auto">{exampleInput}</pre>
-                            </div>
-                          )}
-                          {exampleOutput && (
-                            <div>
-                              <span className="font-medium text-gray-600">Expected Output:</span>
-                              <pre className="mt-1 p-2 bg-white rounded text-xs overflow-x-auto">{exampleOutput}</pre>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {constraints && (
-                        <div className="p-3 bg-gray-50 rounded border">
-                          <div className="font-medium mb-2">Constraints</div>
-                          {Array.isArray(constraints) ? (
-                            <ul className="list-disc list-inside space-y-1">
-                              {constraints.map((c, i) => <li key={i}>{c}</li>)}
-                            </ul>
-                          ) : (
-                            <div className="whitespace-pre-wrap">{constraints}</div>
-                          )}
-                        </div>
-                      )}
-                      <div className="text-xs text-gray-600">Write your code so that all provided testcases pass.</div>
-                    </div>
-                  </div>
-                );
-              })()
+              <>
+                <h3 className="text-lg font-bold mb-2">{currentProblem.title}</h3>
+                <Badge className="mb-4">{currentProblem.difficulty || "easy"}</Badge>
+                <div className="whitespace-pre-wrap text-sm text-gray-700">
+                  {currentProblem.description}
+                </div>
+              </>
             ) : (
               <div>No problem selected</div>
             )}
@@ -355,7 +282,7 @@ const CodingPage = () => {
           <div className="bg-gray-800 px-4 py-2 flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <span className="text-white">Code Editor</span>
-              <Select value={language} onValueChange={setLanguage} disabled={timeExpired}>
+                <Select value={language} onValueChange={setLanguage} disabled={false}>
                 <SelectTrigger className="w-40 bg-gray-700 text-white">
                   <SelectValue />
                 </SelectTrigger>
@@ -365,11 +292,11 @@ const CodingPage = () => {
               </Select>
             </div>
 
-            {timeExpired && <Badge variant="destructive" className="animate-pulse"><AlertCircle /> Time Expired</Badge>}
+            {expired && <Badge variant="destructive" className="animate-pulse"><AlertCircle /> Time Expired</Badge>}
           </div>
 
           <div className="flex-1">
-            <CodeEditor value={code} onChange={setCode} language={language} readOnly={timeExpired} />
+            <CodeEditor value={code} onChange={setCode} language={language} readOnly={false} />
           </div>
 
           <div className="bg-gray-800 border-t p-3">
@@ -390,7 +317,7 @@ const CodingPage = () => {
                 </div>
               </div>
 
-              <Button onClick={handleRun} disabled={isRunning || timeExpired} variant="secondary" className="mt-5">
+              <Button onClick={handleRun} disabled={isRunning || expired} variant="secondary" className="mt-5">
                 <Play className="h-4 w-4 mr-2" /> {isRunning ? "Running…" : "Run"}
               </Button>
             </div>
@@ -404,25 +331,17 @@ const CodingPage = () => {
               <TabsTrigger value="testcases" className="flex-1">Testcase Results</TabsTrigger>
             </TabsList>
             <TabsContent value="testcases" className="flex-1 p-4">
-              <TestcaseResults results={testcaseResults} testcases={(currentProblemDetail?.testcases || currentProblem?.testcases || [])} />
+              <TestcaseResults
+                results={testcaseResults}
+                previewOpen={(currentProblem?.openTestcases || currentProblem?.testcases || []).slice(0, 2)}
+                previewHiddenCount={(currentProblem?.hiddenTestcases || []).slice(0, 4).length || 4}
+              />
             </TabsContent>
           </Tabs>
         </div>
       </div>
 
-      {/* TIME'S UP MODAL */}
-      <Dialog open={showTimeUpModal} onOpenChange={setShowTimeUpModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="text-red-600">Time's Up!</DialogTitle>
-            <DialogDescription>Your editor is locked. You cannot submit code.</DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={() => navigate('/dashboard')}>Dashboard</Button>
-            <Button onClick={() => setShowTimeUpModal(false)}>Review Code</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      
     </div>
   );
 };

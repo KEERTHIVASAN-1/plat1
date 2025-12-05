@@ -38,11 +38,17 @@ export const api = {
 
   // contest
   getRoundWindow: (roundId) => apiClient.get("/timer/window", { params: { roundId } }),
+  startRoundTimer: (roundId, durationSeconds) => apiClient.post("/timer/start", { roundId, durationSeconds }),
+  configureRoundWindow: (roundId, { start, end, locked, durationSeconds } = {}) =>
+    apiClient.post("/timer/configure", { roundId, start, end, locked, durationSeconds }),
+  endRound: (roundId) => apiClient.post("/timer/end", { roundId }),
   getProblems: () => apiClient.get("/problems"),
   getProblem: (id) => apiClient.get(`/problems/${id}`),
 
-  runCode: (data) => apiClient.post("/run", data),
-  submitCode: (data) => apiClient.post("/submit", data),
+  // rebuilt run/submit using contest app API
+  runCode: (data) => apiClient.post("/api/contest/run", data),
+  submitCode: (data) => apiClient.post("/api/contest/submit", data),
+  testCode: (data) => apiClient.post("/api/contest/test", data),
 
   getUserSubmissions: (userId) => apiClient.get(`/submissions/${userId}`),
 
@@ -51,6 +57,10 @@ export const api = {
   addProblem: (data) => apiClient.post("/admin/problem", data),
   updateProblem: (id, data) => apiClient.put(`/admin/problem/${id}`, data),
   deleteProblem: (id) => apiClient.delete(`/admin/problem/${id}`),
+  // timer controls
+  pauseRound: (roundId) => apiClient.post("/timer/pause", { roundId }),
+  resumeRound: (roundId) => apiClient.post("/timer/resume", { roundId }),
+  restartRound: (roundId, durationSeconds) => apiClient.post("/timer/restart", { roundId, durationSeconds }),
 };
 
 export default apiClient;

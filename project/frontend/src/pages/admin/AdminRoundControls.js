@@ -5,52 +5,69 @@ import Navbar from '../../components/Navbar';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { ArrowLeft, Play, Lock, Unlock, Clock, CheckCircle2, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, Power, Play, Lock } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
-import { Input } from '../../components/ui/input';
 import { toast } from '../../hooks/use-toast';
+import { Input } from '../../components/ui/input';
+import { api } from '../../utils/api';
 
 const AdminRoundControls = () => {
-  const { roundInfo, startRound, lockRound, unlockRound, updateRoundStatus, updateRoundDuration, restartRound } = useContest();
+  const { roundInfo, startRound, lockRound, unlockRound, updateRoundStatus } = useContest();
   const navigate = useNavigate();
 
-  const handleStartRound = (roundId) => {
-    startRound(roundId);
-    toast({
-      title: "Round Started",
-      description: `${roundId === 'round1' ? 'Round 1' : 'Round 2'} has been started successfully.`,
-    });
-  };
-
-  const handleLockToggle = (roundId) => {
-    const round = roundInfo[roundId];
-    if (round.isLocked) {
-      unlockRound(roundId);
-      toast({
-        title: "Round Unlocked",
-        description: `${roundId === 'round1' ? 'Round 1' : 'Round 2'} is now accessible.`,
-      });
-    } else {
-      lockRound(roundId);
-      toast({
-        title: "Round Locked",
-        description: `${roundId === 'round1' ? 'Round 1' : 'Round 2'} has been locked.`,
-      });
+  const handleToggleRound = async (roundId) => {
+    try {
+      const round = roundInfo[roundId];
+      if (round.status === 'active') {
+        await api.endRound(roundId);
+        updateRoundStatus(roundId, 'completed');
+        toast({ title: "Round Stopped", description: "Timer stopped and round completed." });
+      } else {
+        await api.startRoundTimer(roundId, undefined);
+        startRound(roundId);
+        toast({ title: "Round Started", description: "Timer started for participants." });
+      }
+    } catch (err) {
+      toast({ title: "Failed to toggle", description: err.message, variant: "destructive" });
     }
   };
 
-  const handleCompleteRound = (roundId) => {
-    updateRoundStatus(roundId, 'completed');
-    toast({
-      title: "Round Completed",
-      description: `${roundId === 'round1' ? 'Round 1' : 'Round 2'} has been marked as completed.`,
-    });
+  const handleLockToggle = (roundId) => {};
+
+  const handleCompleteRound = (roundId) => {};
+
+  const handlePause = async (roundId) => {
+    try {
+      await api.pauseRound(roundId);
+      toast({ title: "Round Paused", description: "Timer paused for participants." });
+    } catch (err) {
+      toast({ title: "Failed to pause", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleResume = async (roundId) => {
+    try {
+      await api.resumeRound(roundId);
+      toast({ title: "Round Resumed", description: "Timer resumed for participants." });
+    } catch (err) {
+      toast({ title: "Failed to resume", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleRestart = async (roundId, durationSeconds) => {
+    try {
+      await api.restartRound(roundId, durationSeconds);
+      toast({ title: "Round Restarted", description: "Timer restarted for participants." });
+    } catch (err) {
+      toast({ title: "Failed to restart", description: err.message, variant: "destructive" });
+    }
   };
 
   const RoundCard = ({ roundId, roundName }) => {
     const round = roundInfo[roundId];
-    const [durationMinutes, setDurationMinutes] = React.useState(Math.floor((round?.duration || 0)/60) || 1);
+    const [startLocal, setStartLocal] = React.useState('');
+    const [endLocal, setEndLocal] = React.useState('');
     const getStatusColor = () => {
       if (round.status === 'active') return 'bg-green-600';
       if (round.status === 'completed') return 'bg-gray-600';
@@ -71,32 +88,6 @@ const AdminRoundControls = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Time Controls */}
-          <div className="p-4 bg-blue-50 rounded-lg space-y-3">
-            <div className="flex items-center justify-between">
-              <Label htmlFor={`duration-${roundId}`} className="text-base">Set Duration (minutes)</Label>
-              <div className="flex items-center space-x-2">
-                <Input
-                  id={`duration-${roundId}`}
-                  type="number"
-                  min={1}
-                  value={durationMinutes}
-                  onChange={(e)=> setDurationMinutes(Number(e.target.value) || 1)}
-                  className="w-24"
-                />
-                <Button
-                  variant="outline"
-                  onClick={()=>{ updateRoundDuration(roundId, durationMinutes); toast({ title: "Duration Updated", description: `${roundName} set to ${durationMinutes} minutes.` }); }}
-                >
-                  Set Time
-                </Button>
-                <Button variant="outline" onClick={()=>{ restartRound(roundId); toast({ title: "Timer Restarted", description: `${roundName} timer restarted.` }); }}>
-                  <RotateCcw className="h-4 w-4 mr-2" /> Restart Timer
-                </Button>
-              </div>
-            </div>
-            <p className="text-xs text-blue-700">Set Time updates the student Round timer. Restart resets from now.</p>
-          </div>
           {/* Status Info */}
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
@@ -113,48 +104,58 @@ const AdminRoundControls = () => {
             </div>
           </div>
 
-          {/* Lock Toggle */}
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-            <div>
-              <Label htmlFor={`lock-${roundId}`} className="text-base">Lock Round</Label>
-              <p className="text-xs text-gray-500">Prevent participants from accessing this round</p>
+          {/* Manual Start/End Configuration */}
+          <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor={`start-${roundId}`}>Start Date/Time</Label>
+                <Input id={`start-${roundId}`} type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor={`end-${roundId}`}>End Date/Time</Label>
+                <Input id={`end-${roundId}`} type="datetime-local" value={endLocal} onChange={(e) => setEndLocal(e.target.value)} />
+              </div>
             </div>
-            <Switch
-              id={`lock-${roundId}`}
-              checked={round.isLocked}
-              onCheckedChange={() => handleLockToggle(roundId)}
-            />
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const toIso = (val) => (val ? new Date(val).toISOString() : undefined);
+                    const payload = { start: toIso(startLocal), end: toIso(endLocal), locked: false };
+                    const { data } = await api.configureRoundWindow(roundId, payload);
+                    // reflect immediately in local state for admin view
+                    const updated = {
+                      ...round,
+                      startTime: data?.startTime ?? round.startTime,
+                      endTime: data?.endTime ?? round.endTime,
+                      isLocked: data?.isLocked ?? round.isLocked,
+                      status: data?.status ?? round.status,
+                    };
+                    // update contest context locally
+                    // minimal safe update since we don't have a dedicated setter exposed
+                    // rely on startRound/updateRoundStatus flows as needed
+                    toast({ title: "Timer Window Updated", description: "Start/End set successfully" });
+                  } catch (err) {
+                    toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+                  }
+                }}
+              >Save Window</Button>
+            </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Button */}
           <div className="space-y-2">
-            {round.status === 'upcoming' && (
-              <Button
-                className="w-full"
-                onClick={() => handleStartRound(roundId)}
-              >
-                <Play className="h-4 w-4 mr-2" />
-                Start {roundName}
-              </Button>
-            )}
-
+            <Button className="w-full" onClick={() => handleToggleRound(roundId)}>
+              <Power className="h-4 w-4 mr-2" />
+              Start / Stop Round Timer
+            </Button>
             {round.status === 'active' && (
-              <>
-                <div className="flex items-center justify-center p-3 bg-green-50 rounded-lg">
-                  <Clock className="h-5 w-5 text-green-600 mr-2 animate-pulse" />
-                  <span className="text-green-700 font-medium">Round is currently active</span>
-                </div>
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  onClick={() => handleCompleteRound(roundId)}
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Mark as Completed
-                </Button>
-              </>
+              <div className="flex items-center justify-center p-3 bg-green-50 rounded-lg">
+                <Clock className="h-5 w-5 text-green-600 mr-2 animate-pulse" />
+                <span className="text-green-700 font-medium">Round is currently active</span>
+              </div>
             )}
-
             {round.status === 'completed' && (
               <div className="flex items-center justify-center p-3 bg-gray-50 rounded-lg">
                 <CheckCircle2 className="h-5 w-5 text-gray-600 mr-2" />

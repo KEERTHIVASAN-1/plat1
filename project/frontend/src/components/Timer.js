@@ -2,21 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Clock, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from './ui/alert';
 
-const Timer = ({ startTime, duration, endTime, onTimeUp }) => {
-  const [timeRemaining, setTimeRemaining] = useState(duration);
+const Timer = ({ startTime, endTime, status, onTimeUp }) => {
+  const [timeRemaining, setTimeRemaining] = useState(0);
   const [isExpired, setIsExpired] = useState(false);
 
   useEffect(() => {
-    if (!startTime) return;
+    if (!startTime && !endTime) return;
 
     const calculateTimeRemaining = () => {
       const now = Date.now();
       let remaining = 0;
-      if (duration && duration > 0 && startTime) {
-        const start = new Date(startTime).getTime();
-        const elapsed = Math.floor((now - start) / 1000);
-        remaining = duration - elapsed;
-      } else if (endTime) {
+      if (endTime) {
         const end = new Date(endTime).getTime();
         remaining = Math.floor((end - now) / 1000);
       }
@@ -44,7 +40,7 @@ const Timer = ({ startTime, duration, endTime, onTimeUp }) => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [startTime, duration, endTime, onTimeUp]);
+  }, [startTime, endTime, status, onTimeUp]);
 
   const formatTime = (seconds) => {
     const hours = Math.floor(seconds / 3600);
