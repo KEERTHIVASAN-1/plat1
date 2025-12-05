@@ -75,10 +75,7 @@ const Dashboard = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Duration:</span>
-                      <span className="font-medium">60 minutes</span>
-                    </div>
+                    
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Problems:</span>
                       <span className="font-medium">{round1Safe.problems.length} problems</span>
@@ -133,10 +130,7 @@ const Dashboard = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Duration:</span>
-                      <span className="font-medium">90 minutes</span>
-                    </div>
+                    
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Problems:</span>
                       <span className="font-medium">{round2Safe.problems.length} problem(s)</span>
@@ -195,11 +189,11 @@ const Dashboard = () => {
             <ul className="space-y-2 text-sm text-gray-700">
               <li className="flex items-start">
                 <CheckCircle2 className="h-4 w-4 mr-2 mt-0.5 text-green-600 flex-shrink-0" />
-                <span>Each round has a time limit. Your editor will be locked when time expires.</span>
+                <span>You can run your code with custom inputs before final submission.</span>
               </li>
               <li className="flex items-start">
                 <CheckCircle2 className="h-4 w-4 mr-2 mt-0.5 text-green-600 flex-shrink-0" />
-                <span>You can run your code with custom inputs before final submission.</span>
+                <span>Focus on writing clean, correct solutions.</span>
               </li>
               <li className="flex items-start">
                 <CheckCircle2 className="h-4 w-4 mr-2 mt-0.5 text-green-600 flex-shrink-0" />

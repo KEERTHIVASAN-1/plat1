@@ -6,7 +6,22 @@ const ContestContext = createContext();
 export const useContest = () => useContext(ContestContext);
 
 export const ContestProvider = ({ children }) => {
-  const [roundInfo, setRoundInfo] = useState({});
+  const [roundInfo, setRoundInfo] = useState({
+    round1: {
+      id: "round1",
+      name: "Round 1",
+      status: "active",
+      isLocked: false,
+      problems: [],
+    },
+    round2: {
+      id: "round2",
+      name: "Round 2",
+      status: "upcoming",
+      isLocked: true,
+      problems: [],
+    },
+  });
   const [participants] = useState([]);
   const [submissions, setSubmissions] = useState([]);
 
@@ -25,6 +40,7 @@ export const ContestProvider = ({ children }) => {
       [roundId]: {
         ...prev[roundId],
         status: "active",
+        startTime: new Date().toISOString(),
         isLocked: false,
       },
     }));
@@ -49,14 +65,27 @@ export const ContestProvider = ({ children }) => {
     try {
       const payload = { code, language, customInput };
       const { data } = await api.runCode(payload);
+
       if (!data?.success) {
-        return { success: false, output: data?.error || "Run failed" };
+        return {
+          success: false,
+          output: data?.error || "Run failed",
+        };
       }
-      const output = data?.output ?? data?.run?.output ?? data?.run?.stdout ?? "";
-      const executionTime = data?.time ?? data?.run?.cpu_time ?? 0;
-      return { success: true, output, executionTime };
+
+      const run = data.run || {};
+
+      return {
+        success: true,
+        output: run.stdout || run.output || "",
+        executionTime: run.cpu_time || 0,
+      };
     } catch (err) {
-      return { success: false, output: "Run error: " + (err.message || err) };
+      console.error("runCode error:", err);
+      return {
+        success: false,
+        output: "Run error: " + (err.message || err),
+      };
     }
   };
 
@@ -67,14 +96,25 @@ export const ContestProvider = ({ children }) => {
     try {
       const payload = { userId, problemId, code, language, round: roundId };
       const { data } = await api.submitCode(payload);
-      if (!data || !data.id) {
-        return { success: false, message: "Submission failed" };
+
+      if (!data?.success) {
+        return {
+          success: false,
+          message: data?.message || "Submission failed",
+        };
       }
+
+      // refresh submissions
       const { data: subs } = await api.getUserSubmissions(userId);
       setSubmissions(subs || []);
-      return { success: true, submission: data };
+
+      return { success: true, submission: data?.result };
     } catch (err) {
-      return { success: false, message: err.message || "Submission error" };
+      console.error("submitCode error:", err);
+      return {
+        success: false,
+        message: err.message || "Submission error",
+      };
     }
   };
 
@@ -83,81 +123,18 @@ export const ContestProvider = ({ children }) => {
   // ===============================
   useEffect(() => {
     async function bootstrap() {
-      const rounds = ["round1"]; // only round1 per user request
-      const next = {};
-
-      for (const id of rounds) {
-        try {
-          const { data } = await api.getRoundWindow(id);
-          const base = {
-            ...(data || {}),
-            id,
-            name: id === "round1" ? "Round 1" : "Round 2",
-          };
-          // keep backend-provided status and timing as-is
-          next[id] = base;
-        } catch (_) {
-          next[id] = {
-            id,
-            name: id === "round1" ? "Round 1" : "Round 2",
-            status: "scheduled",
-            isLocked: true,
-            startTime: null,
-            endTime: null,
-          };
-        }
-      }
-
+      const next = { ...roundInfo };
       try {
         const { data } = await api.getProblems();
         const list = data?.problems || data || [];
-
         next.round1 = { ...(next.round1 || {}), problems: list };
       } catch (err) {
         console.warn("Problem load failed:", err);
       }
-
-      // Ensure round2 exists to avoid UI errors on Dashboard
-      if (!next.round2) {
-        next.round2 = {
-          id: "round2",
-          name: "Round 2",
-          status: "upcoming",
-          isLocked: true,
-          startTime: null,
-          endTime: null,
-          problems: [],
-        };
-      }
-
       setRoundInfo(next);
     }
-
     bootstrap();
   }, []);
-
-  // Poll round window periodically so participants see admin changes
-  useEffect(() => {
-    let mounted = true;
-    const interval = setInterval(async () => {
-      try {
-        const ids = Object.keys(roundInfo);
-        const updated = { ...roundInfo };
-        for (const id of ids) {
-          const { data } = await api.getRoundWindow(id);
-          updated[id] = {
-            ...(updated[id] || {}),
-            ...(data || {}),
-          };
-        }
-        if (mounted) setRoundInfo(updated);
-      } catch (_) {}
-    }, 5000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [roundInfo]);
 
   return (
     <ContestContext.Provider

@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useContest } from '../contexts/ContestContext';
 import CodeEditor from '../components/CodeEditor';
 import TestcaseResults from '../components/TestcaseResults';
-import Timer from '../components/Timer';
 import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
@@ -17,12 +16,8 @@ import { toast } from '../hooks/use-toast';
 import { Code2, Play, Send, AlertCircle } from 'lucide-react';
 import { languageOptions } from '../mock';
 import { api } from '../utils/api';
-import { Alert, AlertDescription } from '../components/ui/alert';
 
-const BACKEND =
-  process.env.REACT_APP_BACKEND_URL ||
-  process.env.REACT_APP_API_URL ||
-  "http://127.0.0.1:8000";
+// Use axios API client base URL from src/utils/api.js
 
 const CodingPage = () => {
   const { roundId } = useParams();
@@ -45,7 +40,9 @@ const CodingPage = () => {
   const [testcaseResults, setTestcaseResults] = useState([]);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [expired, setExpired] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState([]);
+  const [previewHiddenCount, setPreviewHiddenCount] = useState(0);
+  
 
   const problemsRef = useRef(problems);
 
@@ -55,14 +52,8 @@ const CodingPage = () => {
     const fetchProblems = async () => {
       setLoadingProblems(true);
       try {
-        const url = `${BACKEND}/problems`;
-        const res = await fetch(url);
-
-        if (!res.ok) return;
-
-        const data = await res.json();
+        const { data } = await api.getProblems();
         const list = data?.problems || data || [];
-
         if (mounted) {
           setProblems(list);
           problemsRef.current = list;
@@ -70,8 +61,8 @@ const CodingPage = () => {
             setSelectedProblemId(list[0]._id || list[0].id);
           }
         }
-      } catch (err) {
-        console.error("Error loading problems:", err);
+      } catch (_) {
+        // Silently fail to avoid noisy console errors when backend is offline
       } finally {
         if (mounted) setLoadingProblems(false);
       }
@@ -80,11 +71,7 @@ const CodingPage = () => {
     return () => { mounted = false; };
   }, [roundId]);
 
-  useEffect(() => {
-    if (!roundData || (roundData.status !== "active" && roundData.status !== "completed")) {
-      navigate("/dashboard");
-    }
-  }, [roundData, navigate]);
+  
 
   useEffect(() => {
     const template = languageOptions.find(l => l.value === language)?.template;
@@ -93,51 +80,40 @@ const CodingPage = () => {
     }
   }, [language]);
 
-  useEffect(() => {
-    const tick = () => {
-      try {
-        const end = roundData?.endTime ? new Date(roundData.endTime).getTime() : null;
-        if (!end) { setExpired(false); return; }
-        setExpired(Date.now() > end);
-      } catch (_) { setExpired(false); }
-    };
-    tick();
-    const i = setInterval(tick, 1000);
-    return () => clearInterval(i);
-  }, [roundData?.endTime]);
+  
 
   const handleRun = async () => {
     setIsRunning(true);
     setRunOutput('Running...');
     try {
-      const currentProblem = problems.find(p => (p._id || p.id) === selectedProblemId) || problems[0];
-      if (!currentProblem) {
-        toast({ title: "Select a problem", variant: "destructive" });
-        setIsRunning(false);
-        return;
+      // 1) Run with custom input for immediate feedback
+      const res = await runCode(code, language, customInput);
+      setRunOutput((res && res.success) ? (res.output || "No Output") : (res?.output || "Execution Failed"));
+
+      // 2) Evaluate against up to 6 testcases on the right
+      const tcs = Array.isArray(currentProblem?.testcases) ? currentProblem.testcases.slice(0, 6) : [];
+      const results = [];
+      for (let i = 0; i < tcs.length; i++) {
+        const tc = tcs[i];
+        const stdin = tc.input || '';
+        const expected = (tc.output || '').replace(/\r/g, '').trim();
+        const runRes = await runCode(code, language, stdin);
+        const actual = ((runRes && runRes.output) || '').replace(/\r/g, '').trim();
+        const passed = (runRes && runRes.success) && actual === expected;
+        results.push({
+          testcase: `Test Case ${i + 1}`,
+          input: stdin,
+          expectedOutput: expected,
+          actualOutput: actual,
+          passed,
+          hidden: tc.hidden === true,
+        });
       }
-      const payload = {
-        userId: user?.id,
-        problemId: currentProblem._id || currentProblem.id,
-        code,
-        language,
-        round: roundId,
-      };
-      const { data } = await api.testCode(payload);
-      if (!data?.success) {
-        setRunOutput("Execution Failed");
-        setTestcaseResults([]);
-      } else {
-        setTestcaseResults(data.results || []);
-        const passed = data.passed || 0;
-        const total = data.total || (data.results || []).length;
-        setRunOutput(`Passed ${passed}/${total}`);
-        toast({ title: "Run completed", description: `Passed ${passed}/${total}` });
-      }
+      setTestcaseResults(results);
+
     } catch (err) {
       console.error(err);
       setRunOutput("Error: " + err.message);
-      setTestcaseResults([]);
     }
     setIsRunning(false);
   };
@@ -203,6 +179,22 @@ const CodingPage = () => {
     ? problems.find(p => (p._id || p.id) === selectedProblemId) || problems[0]
     : null;
 
+  useEffect(() => {
+    if (!currentProblem) {
+      setPreviewOpen([]);
+      setPreviewHiddenCount(0);
+      return;
+    }
+    const tcs = Array.isArray(currentProblem.testcases) ? currentProblem.testcases.slice(0, 6) : [];
+    // Treat first 2 as open (visible), rest as hidden by default if not specified
+    const open = tcs
+      .filter((tc, i) => tc.hidden !== true && i < 2)
+      .map(tc => ({ input: tc.input || '', output: tc.output || '' }));
+    const hidden = tcs.length - open.length;
+    setPreviewOpen(open);
+    setPreviewHiddenCount(hidden > 0 ? hidden : 0);
+  }, [currentProblem]);
+
   return (
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
 
@@ -217,23 +209,12 @@ const CodingPage = () => {
         </div>
 
         <div className="flex items-center space-x-4">
-          <Timer startTime={roundData?.startTime} endTime={roundData?.endTime} status={roundData?.status} />
-          <Button onClick={handleSubmit} disabled={isSubmitting || expired} className="bg-green-600 hover:bg-green-700">
+          <Button onClick={handleSubmit} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
             <Send className="h-4 w-4 mr-2" /> {isSubmitting ? "Submitting..." : "Submit"}
           </Button>
           <Button variant="outline" onClick={() => navigate("/dashboard")}>Exit</Button>
         </div>
       </div>
-
-      {roundData?.status === 'active' && (
-        <div className="bg-green-50 border-b border-green-200">
-          <div className="max-w-7xl mx-auto px-4 py-2">
-            <Alert className="bg-green-50 border-green-200 text-green-800">
-              <AlertDescription>Round is active. Work continues and timer is ticking.</AlertDescription>
-            </Alert>
-          </div>
-        </div>
-      )}
 
       {/* BODY */}
       <div className="flex-1 flex overflow-hidden">
@@ -282,7 +263,7 @@ const CodingPage = () => {
           <div className="bg-gray-800 px-4 py-2 flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <span className="text-white">Code Editor</span>
-                <Select value={language} onValueChange={setLanguage} disabled={false}>
+              <Select value={language} onValueChange={setLanguage}>
                 <SelectTrigger className="w-40 bg-gray-700 text-white">
                   <SelectValue />
                 </SelectTrigger>
@@ -292,11 +273,11 @@ const CodingPage = () => {
               </Select>
             </div>
 
-            {expired && <Badge variant="destructive" className="animate-pulse"><AlertCircle /> Time Expired</Badge>}
+            
           </div>
 
           <div className="flex-1">
-            <CodeEditor value={code} onChange={setCode} language={language} readOnly={false} />
+            <CodeEditor value={code} onChange={setCode} language={language} />
           </div>
 
           <div className="bg-gray-800 border-t p-3">
@@ -317,7 +298,7 @@ const CodingPage = () => {
                 </div>
               </div>
 
-              <Button onClick={handleRun} disabled={isRunning || expired} variant="secondary" className="mt-5">
+              <Button onClick={handleRun} disabled={isRunning} variant="secondary" className="mt-5">
                 <Play className="h-4 w-4 mr-2" /> {isRunning ? "Running…" : "Run"}
               </Button>
             </div>
@@ -331,11 +312,7 @@ const CodingPage = () => {
               <TabsTrigger value="testcases" className="flex-1">Testcase Results</TabsTrigger>
             </TabsList>
             <TabsContent value="testcases" className="flex-1 p-4">
-              <TestcaseResults
-                results={testcaseResults}
-                previewOpen={(currentProblem?.openTestcases || currentProblem?.testcases || []).slice(0, 2)}
-                previewHiddenCount={(currentProblem?.hiddenTestcases || []).slice(0, 4).length || 4}
-              />
+              <TestcaseResults results={testcaseResults} previewOpen={previewOpen} previewHiddenCount={previewHiddenCount} />
             </TabsContent>
           </Tabs>
         </div>

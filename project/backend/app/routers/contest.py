@@ -93,17 +93,17 @@ async def submit(req: SubmitRequest, current_user: UserOut = Depends(get_current
     if r.get("isLocked", False):
         raise HTTPException(403, "Round locked")
 
-    # timer enforcement based on admin-defined endTime only
-    now = datetime.now(timezone.utc)
-    end = r.get("endTime")
-    if end:
-        try:
-            end_dt = datetime.fromisoformat(end)
-            if now > end_dt:
-                await db.rounds.update_one({"id": req.round}, {"$set": {"isLocked": True, "status": "completed"}})
-                raise HTTPException(403, "Round time is over")
-        except Exception:
-            pass
+    # timer enforcement
+    start = r.get("startTime")
+    duration = r.get("duration", 3600)
+    if start:
+        start_dt = datetime.fromisoformat(start)
+        now = datetime.now(timezone.utc)
+        elapsed = (now - start_dt).total_seconds()
+        if elapsed > duration:
+            # auto-lock
+            await db.rounds.update_one({"id": req.round}, {"$set": {"isLocked": True, "status": "completed"}})
+            raise HTTPException(403, "Round time is over")
 
     prob = await db.problems.find_one({"id": req.problemId})
     if not prob:
@@ -192,80 +192,3 @@ async def submit(req: SubmitRequest, current_user: UserOut = Depends(get_current
         totalTestcases=total,
         results=results
     )
-
-
-# Test code against problem testcases without storing submission
-@router.post("/test")
-async def test_code(req: SubmitRequest, current_user: UserOut = Depends(get_current_user)):
-    if not db:
-        raise HTTPException(500, "DB not available")
-    r = await db.rounds.find_one({"id": req.round})
-    if not r:
-        raise HTTPException(404, "Round not found")
-    if r.get("status") != "active":
-        raise HTTPException(403, "Round not active")
-    if r.get("isLocked", False):
-        raise HTTPException(403, "Round locked")
-
-    now = datetime.now(timezone.utc)
-    end = r.get("endTime")
-    if end:
-        try:
-            end_dt = datetime.fromisoformat(end)
-            if now > end_dt:
-                await db.rounds.update_one({"id": req.round}, {"$set": {"isLocked": True, "status": "completed"}})
-                raise HTTPException(403, "Round time is over")
-        except Exception:
-            pass
-
-    prob = await db.problems.find_one({"id": req.problemId})
-    if not prob:
-        raise HTTPException(404, "Problem not found")
-
-    open_cases = prob.get("openTestcases") or prob.get("testcases") or []
-    hidden_cases = prob.get("hiddenTestcases") or []
-    open_cases = open_cases[:2]
-    hidden_cases = hidden_cases[:4]
-
-    language = LANG_MAP.get(req.language.lower(), req.language.lower())
-    results = []
-    passed = 0
-
-    idx = 1
-    for tc in open_cases:
-        stdin = tc.get("input", "")
-        expected = (tc.get("output", "") or "").replace("\r", "").strip()
-        try:
-            data = await call_piston(req.code, language, stdin)
-        except HTTPException:
-            results.append({"testcase": f"Open {idx}", "hidden": False, "input": stdin, "expectedOutput": expected, "actualOutput": "", "passed": False, "stderr": "execution error"})
-            idx += 1
-            continue
-        run = data.get("run", {})
-        stdout = (run.get("output", "") or run.get("stdout", "") or "").replace("\r", "").strip()
-        ok = (stdout == expected and run.get("code", 0) == 0)
-        if ok:
-            passed += 1
-        results.append({"testcase": f"Open {idx}", "hidden": False, "input": stdin, "expectedOutput": expected, "actualOutput": stdout, "passed": ok, "stderr": run.get("stderr", "")})
-        idx += 1
-
-    hidx = 1
-    for tc in hidden_cases:
-        stdin = tc.get("input", "")
-        expected = (tc.get("output", "") or "").replace("\r", "").strip()
-        try:
-            data = await call_piston(req.code, language, stdin)
-        except HTTPException:
-            results.append({"testcase": f"Hidden {hidx}", "hidden": True, "passed": False, "stderr": "execution error"})
-            hidx += 1
-            continue
-        run = data.get("run", {})
-        stdout = (run.get("output", "") or run.get("stdout", "") or "").replace("\r", "").strip()
-        ok = (stdout == expected and run.get("code", 0) == 0)
-        if ok:
-            passed += 1
-        results.append({"testcase": f"Hidden {hidx}", "hidden": True, "passed": ok})
-        hidx += 1
-
-    total = len(open_cases) + len(hidden_cases)
-    return {"success": True, "results": results, "passed": passed, "total": total}

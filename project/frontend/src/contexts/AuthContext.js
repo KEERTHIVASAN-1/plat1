@@ -37,7 +37,12 @@ export const AuthProvider = ({ children }) => {
       }
       return { success: false, error: 'Invalid credentials' };
     } catch (e) {
-      return { success: false, error: 'Invalid credentials' };
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail || e?.response?.data?.message;
+      if (status === 401) return { success: false, error: detail || 'Invalid credentials' };
+      if (status === 400 || status === 409) return { success: false, error: detail || 'Request error' };
+      if (e?.response) return { success: false, error: 'Server error. Please try again.' };
+      return { success: false, error: 'Network error. Check server connection.' };
     }
   };
 

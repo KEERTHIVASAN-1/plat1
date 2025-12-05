@@ -2,7 +2,6 @@ from fastapi import APIRouter
 import httpx
 
 from auth_routes import router as auth_router
-from timer import router as timer_router
 from anti_cheat import router as anti_router
 from leaderboard import router as leaderboard_router
 from admin_routes import router as admin_router
@@ -25,7 +24,6 @@ async def piston_health():
 
 # Include all routers
 router.include_router(auth_router)
-router.include_router(timer_router)
 router.include_router(anti_router)
 router.include_router(leaderboard_router)
 router.include_router(admin_router)
