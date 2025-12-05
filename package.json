@@ -1,0 +1,13 @@
+{
+  "name": "project-root",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "frontend": "set PORT=5173 && npm run start --prefix project/frontend",
+    "backend": "powershell -NoProfile -Command \"& { Set-Location project/backend; python -m uvicorn server:app --reload --host 127.0.0.1 --port 8000 }\"",
+    "dev": "concurrently -k -n frontend,backend -c green,blue \"npm run frontend\" \"npm run backend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
