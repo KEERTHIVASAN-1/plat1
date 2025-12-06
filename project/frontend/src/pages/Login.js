@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '../components/ui/alert';
 import { Code2, AlertCircle } from 'lucide-react';
 
 const Login = () => {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -59,6 +60,18 @@ const Login = () => {
             )}
             
             <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Your full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
@@ -89,12 +102,6 @@ const Login = () => {
 
           <div className="mt-6 text-center text-sm">
             <p className="text-gray-600">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-blue-600 hover:underline font-medium">
-                Sign up
-              </Link>
-            </p>
-            <p className="text-gray-600 mt-2">
               Admin?{' '}
               <Link to="/admin/login" className="text-blue-600 hover:underline font-medium">
                 Admin Login
@@ -102,13 +109,7 @@ const Login = () => {
             </p>
           </div>
 
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-600 font-medium mb-2">Demo Credentials:</p>
-            <div className="space-y-1 text-xs text-gray-500">
-              <p>Contestant: student@test.com / password123</p>
-              <p>Admin: admin@test.com / admin123</p>
-            </div>
-          </div>
+          
         </CardContent>
       </Card>
     </div>

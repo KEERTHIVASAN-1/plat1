@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
 import { ArrowLeft, Search, CheckCircle2, XCircle, Eye } from 'lucide-react';
+import { Textarea } from '../../components/ui/textarea';
 import { Switch } from '../../components/ui/switch';
 
 const AdminParticipants = () => {
@@ -86,6 +87,7 @@ const AdminParticipants = () => {
                     <TableHead className="text-center">Round 1</TableHead>
                     <TableHead className="text-center">R1 Score</TableHead>
                     <TableHead className="text-center">Round 2 Eligible</TableHead>
+                    <TableHead>Password</TableHead>
                     <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -118,6 +120,23 @@ const AdminParticipants = () => {
                           onCheckedChange={() => toggleEligibility(participant.id)}
                         />
                       </TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            placeholder="Set password"
+                            value={participant.password || ''}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              participant.password = v;
+                            }}
+                          />
+                          <Button size="sm" onClick={async () => {
+                            const v = participant.password || '';
+                            if (!v) return;
+                            try { await api.setParticipantPassword(participant.id, v); } catch (_) {}
+                          }}>Save</Button>
+                        </div>
+                      </TableCell>
                       <TableCell className="text-center">
                         <Button
                           variant="outline"
@@ -128,6 +147,35 @@ const AdminParticipants = () => {
                           View
                         </Button>
                       </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Round 2 Selected */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Round 2 Selected ({participants.filter(p => p.round2Eligible).length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead className="text-center">Round 1 Score</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {participants.filter(p => p.round2Eligible).map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">{p.name}</TableCell>
+                      <TableCell>{p.email}</TableCell>
+                      <TableCell className="text-center">{p.round1TestcasesPassed}/{p.round1TotalTestcases}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

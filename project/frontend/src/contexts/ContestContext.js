@@ -22,7 +22,7 @@ export const ContestProvider = ({ children }) => {
       problems: [],
     },
   });
-  const [participants] = useState([]);
+  const [participants, setParticipants] = useState([]);
   const [submissions, setSubmissions] = useState([]);
 
   const getRoundInfo = (roundId) => roundInfo[roundId];
@@ -118,6 +118,22 @@ export const ContestProvider = ({ children }) => {
     }
   };
 
+  const loadParticipants = async () => {
+    try {
+      const { data } = await api.getParticipants();
+      setParticipants(Array.isArray(data) ? data : []);
+    } catch (_) {
+      setParticipants([]);
+    }
+  };
+
+  const toggleEligibility = async (participantId) => {
+    try {
+      const { data } = await api.toggleEligibility(participantId);
+      setParticipants((prev) => prev.map((p) => p.id === participantId ? { ...p, round2Eligible: data?.round2Eligible } : p));
+    } catch (_) {}
+  };
+
   // ===============================
   // 🔥 LOAD ROUND INFO + PROBLEMS
   // ===============================
@@ -132,6 +148,7 @@ export const ContestProvider = ({ children }) => {
         console.warn("Problem load failed:", err);
       }
       setRoundInfo(next);
+      await loadParticipants();
     }
     bootstrap();
   }, []);
@@ -142,6 +159,7 @@ export const ContestProvider = ({ children }) => {
         roundInfo,
         participants,
         submissions,
+        toggleEligibility,
         getRoundInfo,
         updateRoundStatus,
         startRound,

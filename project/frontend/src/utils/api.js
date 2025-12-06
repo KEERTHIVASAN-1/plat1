@@ -50,6 +50,9 @@ export const api = {
 
   // admin
   getParticipants: () => apiClient.get("/admin/participants"),
+  getParticipant: (id) => apiClient.get(`/admin/participant/${id}`),
+  toggleEligibility: (id) => apiClient.patch(`/admin/participant/${id}/eligibility`),
+  setParticipantPassword: (id, password) => apiClient.patch(`/admin/participant/${id}/password`, null, { params: { password } }),
   addProblem: (data) => apiClient.post("/problems", data),
   updateProblem: (id, data) => apiClient.put(`/problems/${id}`, data),
   deleteProblem: (id) => apiClient.delete(`/problems/${id}`),

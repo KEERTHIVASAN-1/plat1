@@ -47,16 +47,78 @@ def login(payload: Optional[LoginRequest] = None, email: Optional[str] = None, p
             password = payload.password
         if not email or not password:
             raise HTTPException(status_code=400, detail="Missing email or password")
-        user = db.users.find_one({"email": email.lower()})
-        if not user or not verify_password(password, user.get("password", "")):
+
+        e = email.lower()
+
+        # Admin-only login
+        if e == "k32304983@gmail.com":
+            if password != "chikko__7":
+                raise HTTPException(status_code=401, detail="Invalid credentials")
+            admin = db.users.find_one({"email": e})
+            if not admin:
+                import uuid
+                uid = "a" + str(uuid.uuid4())
+                admin = {
+                    "id": uid,
+                    "name": "Admin",
+                    "email": e,
+                    "role": "admin",
+                    "round1Score": 0,
+                    "round2Score": 0,
+                }
+                db.users.insert_one(admin)
+            token = create_token({"id": admin["id"], "role": "admin"})
+            sanitized = {k: v for k, v in admin.items() if k not in ("password", "_id")}
+            return {"access_token": token, "user": sanitized}
+
+        # Special contestant fallback
+        if e == "keerthivasan.eg26@gmail.com":
+            if password != "loveyoudi":
+                raise HTTPException(status_code=401, detail="Invalid credentials")
+            u = db.users.find_one({"email": e})
+            if not u:
+                import uuid
+                uid = "u" + str(uuid.uuid4())
+                u = {
+                    "id": uid,
+                    "name": "Contestant",
+                    "email": e,
+                    "role": "contestant",
+                    "round1Score": 0,
+                    "round2Score": 0,
+                }
+                db.users.insert_one(u)
+            token = create_token({"id": u["id"], "role": "contestant"})
+            sanitized = {k: v for k, v in u.items() if k not in ("password", "_id")}
+            return {"access_token": token, "user": sanitized}
+
+        # Participants-gated login
+        participant = db.participants.find_one({"email": e})
+        if not participant:
             raise HTTPException(status_code=401, detail="Invalid credentials")
-        token = create_token({"id": user["id"], "role": user.get("role", "contestant")})
-        sanitized = {k: v for k, v in user.items() if k not in ("password", "_id")}
+        ppass = participant.get("password")
+        if not ppass or ppass != password:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        u = db.users.find_one({"email": e})
+        if not u:
+            import uuid
+            uid = "u" + str(uuid.uuid4())
+            u = {
+                "id": uid,
+                "name": participant.get("name") or "Contestant",
+                "email": e,
+                "role": "contestant",
+                "round1Score": participant.get("round1TestcasesPassed", 0),
+                "round2Score": participant.get("round2TestcasesPassed", 0),
+            }
+            db.users.insert_one(u)
+        token = create_token({"id": u["id"], "role": "contestant"})
+        sanitized = {k: v for k, v in u.items() if k not in ("password", "_id")}
         return {"access_token": token, "user": sanitized}
     except HTTPException:
         raise
-    except Exception as e:
-        # avoid 500s leaking, return consistent 401 for client
+    except Exception:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
 @router.get("/whoami")

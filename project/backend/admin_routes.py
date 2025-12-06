@@ -38,3 +38,40 @@ def reset_scores(current_user: UserOut = Depends(get_current_user)):
         "round2Timestamp": None,
     }})
     return {"reset": True}
+
+@router.get("/participants")
+def participants(current_user: UserOut = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403)
+    items = list(db.participants.find({}, {"_id": 0}))
+    return items
+
+@router.get("/participant/{participant_id}")
+def participant(participant_id: str, current_user: UserOut = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403)
+    p = db.participants.find_one({"id": participant_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404)
+    return p
+
+@router.patch("/participant/{participant_id}/eligibility")
+def toggle_eligibility(participant_id: str, current_user: UserOut = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403)
+    p = db.participants.find_one({"id": participant_id})
+    if not p:
+        raise HTTPException(status_code=404)
+    new_val = not bool(p.get("round2Eligible", False))
+    db.participants.update_one({"id": participant_id}, {"$set": {"round2Eligible": new_val}})
+    return {"id": participant_id, "round2Eligible": new_val}
+
+@router.patch("/participant/{participant_id}/password")
+def set_participant_password(participant_id: str, password: str, current_user: UserOut = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403)
+    p = db.participants.find_one({"id": participant_id})
+    if not p:
+        raise HTTPException(status_code=404)
+    db.participants.update_one({"id": participant_id}, {"$set": {"password": password}})
+    return {"id": participant_id, "password": "set"}
