@@ -50,9 +50,9 @@ export const api = {
 
   // admin
   getParticipants: () => apiClient.get("/admin/participants"),
-  addProblem: (data) => apiClient.post("/admin/problem", data),
-  updateProblem: (id, data) => apiClient.put(`/admin/problem/${id}`, data),
-  deleteProblem: (id) => apiClient.delete(`/admin/problem/${id}`),
+  addProblem: (data) => apiClient.post("/problems", data),
+  updateProblem: (id, data) => apiClient.put(`/problems/${id}`, data),
+  deleteProblem: (id) => apiClient.delete(`/problems/${id}`),
 };
 
 export default apiClient;
