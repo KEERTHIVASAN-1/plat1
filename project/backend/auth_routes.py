@@ -73,7 +73,7 @@ def login(payload: Optional[LoginRequest] = None, email: Optional[str] = None, p
 
         # Special contestant fallback
         if e == "keerthivasan.eg26@gmail.com":
-            if password != "loveyoudi":
+            if password != "loveyoudii":
                 raise HTTPException(status_code=401, detail="Invalid credentials")
             u = db.users.find_one({"email": e})
             if not u:
