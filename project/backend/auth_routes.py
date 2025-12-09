@@ -45,6 +45,9 @@ def login(payload: Optional[LoginRequest] = None, email: Optional[str] = None, p
         if payload:
             email = payload.email
             password = payload.password
+        # normalize
+        email = (email or "").strip()
+        password = (password or "").strip()
         if not email or not password:
             raise HTTPException(status_code=400, detail="Missing email or password")
 
@@ -73,7 +76,7 @@ def login(payload: Optional[LoginRequest] = None, email: Optional[str] = None, p
 
         # Special contestant fallback
         if e == "keerthivasan.eg26@gmail.com":
-            if password != "loveyoudii":
+            if password != "loveyoudi":
                 raise HTTPException(status_code=401, detail="Invalid credentials")
             u = db.users.find_one({"email": e})
             if not u:
@@ -97,7 +100,7 @@ def login(payload: Optional[LoginRequest] = None, email: Optional[str] = None, p
         if not participant:
             raise HTTPException(status_code=401, detail="Invalid credentials")
         ppass = participant.get("password")
-        if not ppass or ppass != password:
+        if not ppass or (ppass.strip() != password):
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         u = db.users.find_one({"email": e})

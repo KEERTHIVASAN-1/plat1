@@ -40,6 +40,12 @@ export const api = {
   register: (name, email, password) => apiClient.post("/auth/register", { name, email, password }),
 
   // contest
+  getRoundWindow: (roundId) => apiClient.get("/timer/window", { params: { roundId } }),
+  timerConfigure: (roundId, duration, scheduledStart) => apiClient.post("/timer/configure", null, { params: { roundId, duration, scheduledStart } }),
+  timerStart: (roundId) => apiClient.post("/timer/start", null, { params: { roundId } }),
+  timerPause: (roundId) => apiClient.post("/timer/pause", null, { params: { roundId } }),
+  timerRestart: (roundId) => apiClient.post("/timer/restart", null, { params: { roundId } }),
+  timerEnd: (roundId) => apiClient.post("/timer/end", null, { params: { roundId } }),
   getProblems: () => apiClient.get("/problems"),
   getProblem: (id) => apiClient.get(`/problems/${id}`),
 

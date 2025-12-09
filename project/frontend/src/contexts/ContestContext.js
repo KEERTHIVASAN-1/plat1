@@ -10,8 +10,12 @@ export const ContestProvider = ({ children }) => {
     round1: {
       id: "round1",
       name: "Round 1",
-      status: "active",
-      isLocked: false,
+      status: "upcoming",
+      isLocked: true,
+      startTime: null,
+      duration: 0,
+      elapsed: 0,
+      scheduledStart: null,
       problems: [],
     },
     round2: {
@@ -118,6 +122,35 @@ export const ContestProvider = ({ children }) => {
     }
   };
 
+  // Round window polling and admin controls
+  const refreshRoundWindow = async (roundId = 'round1') => {
+    try {
+      const { data } = await api.getRoundWindow(roundId);
+      setRoundInfo((prev) => ({
+        ...prev,
+        [roundId]: {
+          ...(prev[roundId] || {}),
+          status: data?.status || prev[roundId]?.status,
+          isLocked: data?.isLocked ?? prev[roundId]?.isLocked,
+          startTime: data?.startTime ?? prev[roundId]?.startTime,
+          duration: typeof data?.duration === 'number' ? data.duration : parseInt(data?.duration || prev[roundId]?.duration || 0, 10),
+          elapsed: typeof data?.elapsed === 'number' ? data.elapsed : parseInt(data?.elapsed || prev[roundId]?.elapsed || 0, 10),
+          scheduledStart: data?.scheduledStart ?? prev[roundId]?.scheduledStart,
+        },
+      }));
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    let alive = true;
+    const interval = setInterval(() => {
+      if (!alive) return;
+      refreshRoundWindow('round1');
+    }, 1000);
+    refreshRoundWindow('round1');
+    return () => { alive = false; clearInterval(interval); };
+  }, []);
+
   const loadParticipants = async () => {
     try {
       const { data } = await api.getParticipants();
@@ -161,12 +194,13 @@ export const ContestProvider = ({ children }) => {
         submissions,
         toggleEligibility,
         getRoundInfo,
-        updateRoundStatus,
-        startRound,
-        lockRound,
-        unlockRound,
-        runCode,
-        submitCode,
+      updateRoundStatus,
+      startRound,
+      lockRound,
+      unlockRound,
+      refreshRoundWindow,
+      runCode,
+      submitCode,
       }}
     >
       {children}
