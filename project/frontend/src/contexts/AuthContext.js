@@ -26,9 +26,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const e = (email || '').trim();
-      const p = (password || '').trim();
-      const { data } = await api.login(e, p);
+      const { data } = await api.login(email, password);
       const userData = data?.user || null;
       const token = data?.access_token || null;
       if (userData && token) {
@@ -39,12 +37,7 @@ export const AuthProvider = ({ children }) => {
       }
       return { success: false, error: 'Invalid credentials' };
     } catch (e) {
-      const status = e?.response?.status;
-      const detail = e?.response?.data?.detail || e?.response?.data?.message;
-      if (status === 401) return { success: false, error: detail || 'Invalid credentials' };
-      if (status === 400 || status === 409) return { success: false, error: detail || 'Request error' };
-      if (e?.response) return { success: false, error: 'Server error. Please try again.' };
-      return { success: false, error: 'Network error. Check server connection.' };
+      return { success: false, error: 'Invalid credentials' };
     }
   };
 

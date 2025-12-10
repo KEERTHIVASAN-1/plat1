@@ -190,21 +190,5 @@ async def submit(req: SubmitRequest, current_user: UserOut = Depends(get_current
         timestamp=datetime.fromisoformat(timestamp),
         testcasesPassed=passed,
         totalTestcases=total,
-      results=results
+        results=results
     )
-
-
-@router.get("/problems")
-async def list_problems():
-    if not db:
-        raise HTTPException(500, "DB not available")
-    items = await db.problems.find({}).to_list(1000)
-    return {"problems": items}
-
-
-@router.get("/submissions/{userId}")
-async def user_submissions(userId: str, current_user: UserOut = Depends(get_current_user)):
-    if current_user.role != "admin" and current_user.id != userId:
-        raise HTTPException(403)
-    items = await db.submissions.find({"userId": userId}).sort("timestamp", -1).to_list(100)
-    return items

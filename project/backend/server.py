@@ -10,10 +10,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 app = FastAPI(title="Contest Backend")
 
 # CORS
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -29,13 +26,11 @@ from routes import router as core_router
 from contest.submit_router import router as submit_router
 from contest.problem_router import router as problem_router
 from contest.run_router import router as run_router   # <-- NEW router
-from timer import router as timer_router
 
 app.include_router(core_router)
 app.include_router(submit_router)
 app.include_router(problem_router)
 app.include_router(run_router)
-app.include_router(timer_router)
 
 
 # --------------------------

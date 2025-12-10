@@ -67,80 +67,18 @@ async def register(input: UserCreate):
 async def login(input: UserLogin):
     if not db:
         raise HTTPException(500, "Database not configured")
-    e = input.email.lower()
-
-    # Admin-only login
-    if e == "k32304983@gmail.com":
-        if input.password != "chikko__7":
-            raise HTTPException(http_status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
-        admin = await db.users.find_one({"email": e})
-        if not admin:
-            uid = str(uuid.uuid4())
-            admin = {
-                "id": uid,
-                "name": "Admin",
-                "email": e,
-                "role": "admin",
-                "round1Score": 0,
-                "round2Score": 0,
-            }
-            await db.users.insert_one(admin)
-        token = create_token({"id": admin["id"], "role": "admin"})
-        out = UserOut(
-            id=admin["id"], name=admin.get("name", "Admin"), email=e, role="admin",
-            round1Completed=admin.get("round1Completed", False), round2Eligible=True,
-            round1Score=admin.get("round1Score", 0), round2Score=admin.get("round2Score", 0)
-        )
-        return TokenResponse(access_token=token, user=out)
-
-    # Special contestant fallback
-    if e == "keerthivasan.eg26@gmail.com":
-        if input.password != "loveyoudi":
-            raise HTTPException(http_status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
-        u = await db.users.find_one({"email": e})
-        if not u:
-            uid = str(uuid.uuid4())
-            u = {
-                "id": uid,
-                "name": "Contestant",
-                "email": e,
-                "role": "contestant",
-                "round1Score": 0,
-                "round2Score": 0,
-            }
-            await db.users.insert_one(u)
-        token = create_token({"id": u["id"], "role": "contestant"})
-        out = UserOut(
-            id=u["id"], name=u.get("name", "Contestant"), email=e, role="contestant",
-            round1Completed=u.get("round1Completed", False), round2Eligible=u.get("round2Eligible", False),
-            round1Score=u.get("round1Score", 0), round2Score=u.get("round2Score", 0)
-        )
-        return TokenResponse(access_token=token, user=out)
-
-    # Participants-gated login
-    participant = await db.participants.find_one({"email": e})
-    if not participant:
+    user = await db.users.find_one({"email": input.email.lower()})
+    if not user or not verify_password(input.password, user["password"]):
         raise HTTPException(http_status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
-    ppass = participant.get("password")
-    if not ppass or ppass != input.password:
-        raise HTTPException(http_status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
-
-    u = await db.users.find_one({"email": e})
-    if not u:
-        uid = str(uuid.uuid4())
-        u = {
-            "id": uid,
-            "name": participant.get("name") or "Contestant",
-            "email": e,
-            "role": "contestant",
-            "round1Score": participant.get("round1TestcasesPassed", 0),
-            "round2Score": participant.get("round2TestcasesPassed", 0),
-        }
-        await db.users.insert_one(u)
-    token = create_token({"id": u["id"], "role": u.get("role", "contestant")})
+    token = create_token({"id": user["id"], "role": user.get("role", "contestant")})
     out = UserOut(
-        id=u["id"], name=u.get("name"), email=e, role=u.get("role", "contestant"),
-        round1Completed=u.get("round1Completed", False), round2Eligible=u.get("round2Eligible", False),
-        round1Score=u.get("round1Score", 0), round2Score=u.get("round2Score", 0)
+        id=user["id"],
+        name=user.get("name"),
+        email=user.get("email"),
+        role=user.get("role", "contestant"),
+        round1Completed=user.get("round1Completed", False),
+        round2Eligible=user.get("round2Eligible", False),
+        round1Score=user.get("round1Score", 0),
+        round2Score=user.get("round2Score", 0),
     )
     return TokenResponse(access_token=token, user=out)

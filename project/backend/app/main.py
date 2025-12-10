@@ -4,7 +4,7 @@ from starlette.middleware.cors import CORSMiddleware
 import logging
 from datetime import datetime, timezone
 from .db import client
-from .routers import status, auth, contest, admin, timer
+from .routers import status, auth, contest, admin
 from .config import CORS_ORIGINS
 
 app = FastAPI(title="Coding Contest Backend")
@@ -28,7 +28,6 @@ app.include_router(status.router)
 app.include_router(auth.router)
 app.include_router(contest.router)
 app.include_router(admin.router)
-app.include_router(timer.router)
 
 @app.get("/")
 async def root():

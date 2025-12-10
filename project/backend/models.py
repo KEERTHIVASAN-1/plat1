@@ -9,7 +9,6 @@ class Problem(BaseModel):
     id: str
     title: str
     description: str
-    difficulty: Optional[str] = "easy"
     testcases: List[Testcase]
 
 class SubmitRequest(BaseModel):

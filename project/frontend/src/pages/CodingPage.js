@@ -13,7 +13,7 @@ import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { toast } from '../hooks/use-toast';
-import { Code2, Play, Send, AlertCircle, Clock } from 'lucide-react';
+import { Code2, Play, Send, AlertCircle } from 'lucide-react';
 import { languageOptions } from '../mock';
 import { api } from '../utils/api';
 
@@ -195,41 +195,6 @@ const CodingPage = () => {
     setPreviewHiddenCount(hidden > 0 ? hidden : 0);
   }, [currentProblem]);
 
-  // compute time left if active
-  const [nowTick, setNowTick] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNowTick(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const secondsLeft = (() => {
-    const d = roundData?.duration || 0;
-    const elapsed = roundData?.elapsed || 0;
-    const start = roundData?.startTime ? Date.parse(roundData.startTime) : null;
-    if (!d) return 0;
-    if (roundData?.status !== 'active' || !start) return Math.max(0, d - elapsed);
-    const sinceStart = Math.floor((nowTick - start) / 1000);
-    return Math.max(0, d - elapsed - sinceStart);
-  })();
-
-  const mm = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
-  const ss = String(secondsLeft % 60).padStart(2, '0');
-
-  const lockedOrNotStarted = !roundData || roundData.status !== 'active' || roundData.isLocked;
-
-  useEffect(() => {
-    const roundId = roundData?.id || 'round1';
-    if (!lockedOrNotStarted && secondsLeft <= 0) {
-      (async () => {
-        try {
-          await api.timerEnd(roundId);
-        } catch (_) {}
-        toast({ title: "Time's up", description: "Round ended. Redirecting..." });
-        navigate('/dashboard');
-      })();
-    }
-  }, [lockedOrNotStarted, secondsLeft, roundData, navigate]);
-
   return (
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
 
@@ -244,10 +209,6 @@ const CodingPage = () => {
         </div>
 
         <div className="flex items-center space-x-4">
-          <div className="flex items-center px-3 py-1 bg-blue-50 rounded-md border">
-            <Clock className="h-4 w-4 text-blue-600 mr-2" />
-            <span className="text-sm font-medium text-blue-700">{mm}:{ss}</span>
-          </div>
           <Button onClick={handleSubmit} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
             <Send className="h-4 w-4 mr-2" /> {isSubmitting ? "Submitting..." : "Submit"}
           </Button>
@@ -263,9 +224,7 @@ const CodingPage = () => {
           <div className="p-4 border-b">
             <h2 className="font-semibold text-sm text-gray-600 mb-2">Problems</h2>
             <div className="space-y-2">
-              {lockedOrNotStarted ? (
-                <div className="text-sm text-gray-500">Waiting for round to start...</div>
-              ) : loadingProblems ? (
+              {loadingProblems ? (
                 <div className="text-sm text-gray-500">Loading problems…</div>
               ) : problems.map((p, i) => (
                 <button key={p._id || p.id || i}
@@ -285,9 +244,7 @@ const CodingPage = () => {
           </div>
 
           <ScrollArea className="flex-1 p-4">
-            {lockedOrNotStarted ? (
-              <div className="text-sm text-gray-500">Round content is locked until the admin starts the round.</div>
-            ) : currentProblem ? (
+            {currentProblem ? (
               <>
                 <h3 className="text-lg font-bold mb-2">{currentProblem.title}</h3>
                 <Badge className="mb-4">{currentProblem.difficulty || "easy"}</Badge>
@@ -320,11 +277,7 @@ const CodingPage = () => {
           </div>
 
           <div className="flex-1">
-            {lockedOrNotStarted ? (
-              <div className="h-full flex items-center justify-center text-gray-300">Round not started</div>
-            ) : (
-              <CodeEditor value={code} onChange={setCode} language={language} />
-            )}
+            <CodeEditor value={code} onChange={setCode} language={language} />
           </div>
 
           <div className="bg-gray-800 border-t p-3">
@@ -345,7 +298,7 @@ const CodingPage = () => {
                 </div>
               </div>
 
-              <Button onClick={handleRun} disabled={isRunning || lockedOrNotStarted} variant="secondary" className="mt-5">
+              <Button onClick={handleRun} disabled={isRunning} variant="secondary" className="mt-5">
                 <Play className="h-4 w-4 mr-2" /> {isRunning ? "Running…" : "Run"}
               </Button>
             </div>
@@ -359,11 +312,7 @@ const CodingPage = () => {
               <TabsTrigger value="testcases" className="flex-1">Testcase Results</TabsTrigger>
             </TabsList>
             <TabsContent value="testcases" className="flex-1 p-4">
-              {lockedOrNotStarted ? (
-                <div className="text-sm text-gray-500 text-center py-8">Round not started</div>
-              ) : (
-                <TestcaseResults results={testcaseResults} previewOpen={previewOpen} previewHiddenCount={previewHiddenCount} />
-              )}
+              <TestcaseResults results={testcaseResults} previewOpen={previewOpen} previewHiddenCount={previewHiddenCount} />
             </TabsContent>
           </Tabs>
         </div>

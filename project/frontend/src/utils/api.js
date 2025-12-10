@@ -4,7 +4,7 @@ import axios from 'axios';
 const BACKEND_URL =
   process.env.REACT_APP_BACKEND_URL ||
   process.env.REACT_APP_API_URL ||
-  "http://127.0.0.1:3001";
+  "http://127.0.0.1:8000";
 
 const apiClient = axios.create({
   baseURL: BACKEND_URL,
@@ -23,10 +23,7 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (res) => res,
   (error) => {
-    const status = error?.response?.status;
-    const url = error?.config?.url || "";
-    const isAuthEndpoint = url.includes("/auth/login") || url.includes("/auth/register");
-    if (status === 401 && !isAuthEndpoint) {
+    if (error?.response?.status === 401) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       window.location.href = "/login";
@@ -41,11 +38,6 @@ export const api = {
 
   // contest
   getRoundWindow: (roundId) => apiClient.get("/timer/window", { params: { roundId } }),
-  timerConfigure: (roundId, duration, scheduledStart) => apiClient.post("/timer/configure", null, { params: { roundId, duration, scheduledStart } }),
-  timerStart: (roundId) => apiClient.post("/timer/start", null, { params: { roundId } }),
-  timerPause: (roundId) => apiClient.post("/timer/pause", null, { params: { roundId } }),
-  timerRestart: (roundId) => apiClient.post("/timer/restart", null, { params: { roundId } }),
-  timerEnd: (roundId) => apiClient.post("/timer/end", null, { params: { roundId } }),
   getProblems: () => apiClient.get("/problems"),
   getProblem: (id) => apiClient.get(`/problems/${id}`),
 
@@ -56,12 +48,9 @@ export const api = {
 
   // admin
   getParticipants: () => apiClient.get("/admin/participants"),
-  getParticipant: (id) => apiClient.get(`/admin/participant/${id}`),
-  toggleEligibility: (id) => apiClient.patch(`/admin/participant/${id}/eligibility`),
-  setParticipantPassword: (id, password) => apiClient.patch(`/admin/participant/${id}/password`, null, { params: { password } }),
-  addProblem: (data) => apiClient.post("/problems", data),
-  updateProblem: (id, data) => apiClient.put(`/problems/${id}`, data),
-  deleteProblem: (id) => apiClient.delete(`/problems/${id}`),
+  addProblem: (data) => apiClient.post("/admin/problem", data),
+  updateProblem: (id, data) => apiClient.put(`/admin/problem/${id}`, data),
+  deleteProblem: (id) => apiClient.delete(`/admin/problem/${id}`),
 };
 
 export default apiClient;
