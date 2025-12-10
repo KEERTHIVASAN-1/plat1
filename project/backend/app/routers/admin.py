@@ -32,6 +32,18 @@ async def admin_toggle_eligibility(participant_id: str, admin = Depends(get_curr
     await db.participants.update_one({"id": participant_id}, {"$set": {"round2Eligible": new_val}})
     return {"id": participant_id, "round2Eligible": new_val}
 
+@router.patch("/admin/participant/{participant_id}/password")
+async def admin_set_password(participant_id: str, password: Optional[str] = None, admin = Depends(get_current_user)):
+    if admin.role != "admin":
+        raise HTTPException(403)
+    if not password:
+        raise HTTPException(400, "Password required")
+    p = await db.participants.find_one({"id": participant_id})
+    if not p:
+        raise HTTPException(404)
+    await db.participants.update_one({"id": participant_id}, {"$set": {"password": password}})
+    return {"id": participant_id, "password": "set"}
+
 @router.patch("/admin/round/{round_id}/status")
 async def admin_round_status(round_id: str, body: dict, admin = Depends(get_current_user)):
     if admin.role != "admin":

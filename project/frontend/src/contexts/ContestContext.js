@@ -10,10 +10,13 @@ export const ContestProvider = ({ children }) => {
     round1: {
       id: "round1",
       name: "Round 1",
-      status: "active",
-      isLocked: false,
-      startTime: new Date().toISOString(),
-      duration: 3600,
+      status: "upcoming",
+      isLocked: true,
+      startTime: null,
+      duration: 0,
+      elapsed: 0,
+      scheduledStart: null,
+      remaining: 0,
       problems: [],
     },
     round2: {
@@ -21,12 +24,10 @@ export const ContestProvider = ({ children }) => {
       name: "Round 2",
       status: "upcoming",
       isLocked: true,
-      startTime: null,
-      duration: 5400,
       problems: [],
     },
   });
-  const [participants] = useState([]);
+  const [participants, setParticipants] = useState([]);
   const [submissions, setSubmissions] = useState([]);
 
   const getRoundInfo = (roundId) => roundInfo[roundId];
@@ -122,66 +123,80 @@ export const ContestProvider = ({ children }) => {
     }
   };
 
+  // Round window polling and admin controls
+  const refreshRoundWindow = async (roundId = 'round1') => {
+    try {
+      const { data } = await api.getRoundWindow(roundId);
+      const duration = typeof data?.duration === 'number' ? data.duration : parseInt(data?.duration || 0, 10);
+      const elapsed = typeof data?.elapsed === 'number' ? data.elapsed : parseInt(data?.elapsed || 0, 10);
+      const startIso = data?.startTime;
+      let remaining = 0;
+      if (duration) {
+        if (data?.status === 'active' && startIso) {
+          const sinceStart = Math.floor((Date.now() - Date.parse(startIso)) / 1000);
+          remaining = Math.max(0, duration - elapsed - sinceStart);
+        } else {
+          remaining = Math.max(0, duration - elapsed);
+        }
+      }
+      setRoundInfo((prev) => ({
+        ...prev,
+        [roundId]: {
+          ...(prev[roundId] || {}),
+          status: data?.status || prev[roundId]?.status,
+          isLocked: data?.isLocked ?? prev[roundId]?.isLocked,
+          startTime: data?.startTime ?? prev[roundId]?.startTime,
+          duration: duration || prev[roundId]?.duration || 0,
+          elapsed: elapsed || prev[roundId]?.elapsed || 0,
+          scheduledStart: data?.scheduledStart ?? prev[roundId]?.scheduledStart,
+          remaining,
+        },
+      }));
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    let alive = true;
+    const interval = setInterval(() => {
+      if (!alive) return;
+      refreshRoundWindow('round1');
+    }, 1000);
+    refreshRoundWindow('round1');
+    return () => { alive = false; clearInterval(interval); };
+  }, []);
+
+  const loadParticipants = async () => {
+    try {
+      const { data } = await api.getParticipants();
+      setParticipants(Array.isArray(data) ? data : []);
+    } catch (_) {
+      setParticipants([]);
+    }
+  };
+
+  const toggleEligibility = async (participantId) => {
+    try {
+      const { data } = await api.toggleEligibility(participantId);
+      setParticipants((prev) => prev.map((p) => p.id === participantId ? { ...p, round2Eligible: data?.round2Eligible } : p));
+    } catch (_) {}
+  };
+
   // ===============================
   // 🔥 LOAD ROUND INFO + PROBLEMS
   // ===============================
   useEffect(() => {
     async function bootstrap() {
-      const rounds = ["round1"]; // only round1 per user request
-      const next = {};
-
-      for (const id of rounds) {
-        try {
-          const { data } = await api.getRoundWindow(id);
-          const base = {
-            ...(data || {}),
-            id,
-            name: id === "round1" ? "Round 1" : "Round 2",
-          };
-          if (!base.status || base.status === "scheduled") {
-            base.status = "active";
-            base.startTime = new Date().toISOString();
-            base.isLocked = false;
-            base.duration = base.duration || 3600;
-          }
-          next[id] = base;
-        } catch (_) {
-          next[id] = {
-            id,
-            name: id === "round1" ? "Round 1" : "Round 2",
-            status: "active",
-            isLocked: false,
-            startTime: new Date().toISOString(),
-            duration: 3600,
-          };
-        }
-      }
-
+      const next = { ...roundInfo };
       try {
         const { data } = await api.getProblems();
         const list = data?.problems || data || [];
-
         next.round1 = { ...(next.round1 || {}), problems: list };
       } catch (err) {
         console.warn("Problem load failed:", err);
       }
-
-      // Ensure round2 exists to avoid UI errors on Dashboard
-      if (!next.round2) {
-        next.round2 = {
-          id: "round2",
-          name: "Round 2",
-          status: "upcoming",
-          isLocked: true,
-          startTime: null,
-          duration: 5400,
-          problems: [],
-        };
-      }
-
       setRoundInfo(next);
+      await loadParticipants();
     }
-
     bootstrap();
   }, []);
 
@@ -191,13 +206,15 @@ export const ContestProvider = ({ children }) => {
         roundInfo,
         participants,
         submissions,
+        toggleEligibility,
         getRoundInfo,
-        updateRoundStatus,
-        startRound,
-        lockRound,
-        unlockRound,
-        runCode,
-        submitCode,
+      updateRoundStatus,
+      startRound,
+      lockRound,
+      unlockRound,
+      refreshRoundWindow,
+      runCode,
+      submitCode,
       }}
     >
       {children}

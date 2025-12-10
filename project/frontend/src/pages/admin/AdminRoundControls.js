@@ -1,25 +1,34 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useContest } from '../../contexts/ContestContext';
+import { api } from '../../utils/api';
 import Navbar from '../../components/Navbar';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { ArrowLeft, Play, Lock, Unlock, Clock, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Play, Pause, RotateCcw, Lock, Unlock, Clock, CheckCircle2 } from 'lucide-react';
+import { Input } from '../../components/ui/input';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
 import { toast } from '../../hooks/use-toast';
 
 const AdminRoundControls = () => {
-  const { roundInfo, startRound, lockRound, unlockRound, updateRoundStatus } = useContest();
+  const { roundInfo, lockRound, unlockRound, refreshRoundWindow } = useContest();
+  const [durationMin, setDurationMin] = React.useState(60);
+  const [scheduledStart, setScheduledStart] = React.useState('');
+  const [opBusy, setOpBusy] = React.useState(false);
   const navigate = useNavigate();
 
-  const handleStartRound = (roundId) => {
-    startRound(roundId);
-    toast({
-      title: "Round Started",
-      description: `${roundId === 'round1' ? 'Round 1' : 'Round 2'} has been started successfully.`,
-    });
+  const handleStartRound = async (roundId) => {
+    if (opBusy) return; setOpBusy(true);
+    try {
+      const durationSeconds = Math.max(0, parseInt(durationMin || 0, 10)) * 60;
+      await api.timerStart(roundId, durationSeconds);
+      await refreshRoundWindow(roundId);
+      toast({ title: "Round Started", description: `${roundId === 'round1' ? 'Round 1' : 'Round 2'} started.` });
+    } catch (e) {
+      toast({ title: "Start failed", description: e?.message || 'Error', variant: "destructive" });
+    } finally { setOpBusy(false); }
   };
 
   const handleLockToggle = (roundId) => {
@@ -39,12 +48,51 @@ const AdminRoundControls = () => {
     }
   };
 
-  const handleCompleteRound = (roundId) => {
-    updateRoundStatus(roundId, 'completed');
-    toast({
-      title: "Round Completed",
-      description: `${roundId === 'round1' ? 'Round 1' : 'Round 2'} has been marked as completed.`,
-    });
+  const handlePauseRound = async (roundId) => {
+    if (opBusy) return; setOpBusy(true);
+    try {
+      await api.timerPause(roundId);
+      await refreshRoundWindow(roundId);
+      toast({ title: "Round Paused" });
+    } catch (e) {
+      toast({ title: "Pause failed", description: e?.message || 'Error', variant: "destructive" });
+    } finally { setOpBusy(false); }
+  };
+
+  const handleResumeRound = async (roundId) => {
+    if (opBusy) return; setOpBusy(true);
+    try {
+      await api.timerResume(roundId);
+      await refreshRoundWindow(roundId);
+      toast({ title: "Round Resumed" });
+    } catch (e) {
+      toast({ title: "Resume failed", description: e?.message || 'Error', variant: "destructive" });
+    } finally { setOpBusy(false); }
+  };
+
+  const handleRestartRound = async (roundId) => {
+    if (opBusy) return; setOpBusy(true);
+    try {
+      const durationSeconds = Math.max(0, parseInt(durationMin || 0, 10)) * 60;
+      await api.timerRestart(roundId, durationSeconds);
+      await refreshRoundWindow(roundId);
+      toast({ title: "Round Restarted" });
+    } catch (e) {
+      toast({ title: "Restart failed", description: e?.message || 'Error', variant: "destructive" });
+    } finally { setOpBusy(false); }
+  };
+
+  const applySchedule = async (roundId) => {
+    if (opBusy) return; setOpBusy(true);
+    try {
+      const durationSeconds = Math.max(0, parseInt(durationMin || 0, 10)) * 60;
+      const startAt = scheduledStart || undefined;
+      await api.timerSchedule(roundId, startAt, durationSeconds);
+      await refreshRoundWindow(roundId);
+      toast({ title: "Schedule saved" });
+    } catch (e) {
+      toast({ title: "Save failed", description: e?.message || 'Error', variant: "destructive" });
+    } finally { setOpBusy(false); }
   };
 
   const RoundCard = ({ roundId, roundName }) => {
@@ -65,7 +113,7 @@ const AdminRoundControls = () => {
             </Badge>
           </div>
           <CardDescription>
-            Duration: {round.duration / 60} minutes | Problems: {round.problems.length}
+            Duration: {(round.duration || 0) / 60} minutes | Problems: {round.problems.length}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -76,6 +124,7 @@ const AdminRoundControls = () => {
               <p className="font-medium">
                 {round.startTime ? new Date(round.startTime).toLocaleString() : 'Not started'}
               </p>
+              <p className="text-xs text-gray-500">Scheduled: {round.scheduledStart ? new Date(round.scheduledStart).toLocaleString() : 'None'}</p>
             </div>
             <div>
               <p className="text-gray-600">Lock Status:</p>
@@ -100,39 +149,30 @@ const AdminRoundControls = () => {
 
           {/* Action Buttons */}
           <div className="space-y-2">
-            {round.status === 'upcoming' && (
-              <Button
-                className="w-full"
-                onClick={() => handleStartRound(roundId)}
-              >
-                <Play className="h-4 w-4 mr-2" />
-                Start {roundName}
+            <div className="grid grid-cols-4 gap-2">
+              <Button onClick={() => handleStartRound(roundId)} disabled={opBusy}>
+                <Play className="h-4 w-4 mr-2" />Start
               </Button>
-            )}
+              <Button variant="outline" onClick={() => handlePauseRound(roundId)} disabled={opBusy}>
+                <Pause className="h-4 w-4 mr-2" />Pause
+              </Button>
+              <Button variant="outline" onClick={() => handleResumeRound(roundId)} disabled={opBusy}>
+                <Unlock className="h-4 w-4 mr-2" />Resume
+              </Button>
+              <Button variant="secondary" onClick={() => handleRestartRound(roundId)} disabled={opBusy}>
+                <RotateCcw className="h-4 w-4 mr-2" />Restart
+              </Button>
+            </div>
 
-            {round.status === 'active' && (
-              <>
-                <div className="flex items-center justify-center p-3 bg-green-50 rounded-lg">
-                  <Clock className="h-5 w-5 text-green-600 mr-2 animate-pulse" />
-                  <span className="text-green-700 font-medium">Round is currently active</span>
-                </div>
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  onClick={() => handleCompleteRound(roundId)}
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Mark as Completed
-                </Button>
-              </>
-            )}
-
-            {round.status === 'completed' && (
-              <div className="flex items-center justify-center p-3 bg-gray-50 rounded-lg">
-                <CheckCircle2 className="h-5 w-5 text-gray-600 mr-2" />
-                <span className="text-gray-700 font-medium">Round completed</span>
+            <div className="p-4 bg-gray-50 rounded-lg space-y-2">
+              <Label className="text-sm">Duration (minutes)</Label>
+              <Input type="number" min="0" value={durationMin} onChange={(e) => setDurationMin(e.target.value)} />
+              <Label className="text-sm">Scheduled Start (local date-time)</Label>
+              <Input type="datetime-local" value={scheduledStart} onChange={(e) => setScheduledStart(e.target.value)} />
+              <div className="text-right">
+                <Button onClick={() => applySchedule(roundId)} disabled={opBusy}>Save Configuration</Button>
               </div>
-            )}
+            </div>
           </div>
         </CardContent>
       </Card>

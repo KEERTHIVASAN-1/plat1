@@ -4,7 +4,7 @@ import axios from 'axios';
 const BACKEND_URL =
   process.env.REACT_APP_BACKEND_URL ||
   process.env.REACT_APP_API_URL ||
-  "http://127.0.0.1:8000";
+  "http://127.0.0.1:3001";
 
 const apiClient = axios.create({
   baseURL: BACKEND_URL,
@@ -23,7 +23,10 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error?.response?.status === 401) {
+    const status = error?.response?.status;
+    const url = error?.config?.url || "";
+    const isAuthEndpoint = url.includes("/auth/login") || url.includes("/auth/register");
+    if (status === 401 && !isAuthEndpoint) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       window.location.href = "/login";
@@ -38,6 +41,48 @@ export const api = {
 
   // contest
   getRoundWindow: (roundId) => apiClient.get("/timer/window", { params: { roundId } }),
+  timerStart: async (roundId, durationSeconds) => {
+    const body = { roundId, durationSeconds };
+    try { return await apiClient.post("/timer/start", body); } catch (e) {
+      if (e?.response?.status === 422) return apiClient.post("/timer/start", null, { params: body });
+      throw e;
+    }
+  },
+  timerPause: async (roundId) => {
+    const body = { roundId };
+    try { return await apiClient.post("/timer/pause", body); } catch (e) {
+      if (e?.response?.status === 422) return apiClient.post("/timer/pause", null, { params: body });
+      throw e;
+    }
+  },
+  timerResume: async (roundId) => {
+    const body = { roundId };
+    try { return await apiClient.post("/timer/resume", body); } catch (e) {
+      if (e?.response?.status === 422) return apiClient.post("/timer/resume", null, { params: body });
+      throw e;
+    }
+  },
+  timerRestart: async (roundId, durationSeconds) => {
+    const body = { roundId, durationSeconds };
+    try { return await apiClient.post("/timer/restart", body); } catch (e) {
+      if (e?.response?.status === 422) return apiClient.post("/timer/restart", null, { params: body });
+      throw e;
+    }
+  },
+  timerSchedule: async (roundId, startAt, durationSeconds) => {
+    const body = { roundId, startAt, durationSeconds };
+    try { return await apiClient.post("/timer/schedule", body); } catch (e) {
+      if (e?.response?.status === 422) return apiClient.post("/timer/schedule", null, { params: body });
+      throw e;
+    }
+  },
+  timerEnd: async (roundId) => {
+    const body = { roundId };
+    try { return await apiClient.post("/timer/end", body); } catch (e) {
+      if (e?.response?.status === 422) return apiClient.post("/timer/end", null, { params: body });
+      throw e;
+    }
+  },
   getProblems: () => apiClient.get("/problems"),
   getProblem: (id) => apiClient.get(`/problems/${id}`),
 
@@ -48,9 +93,12 @@ export const api = {
 
   // admin
   getParticipants: () => apiClient.get("/admin/participants"),
-  addProblem: (data) => apiClient.post("/admin/problem", data),
-  updateProblem: (id, data) => apiClient.put(`/admin/problem/${id}`, data),
-  deleteProblem: (id) => apiClient.delete(`/admin/problem/${id}`),
+  getParticipant: (id) => apiClient.get(`/admin/participant/${id}`),
+  toggleEligibility: (id) => apiClient.patch(`/admin/participant/${id}/eligibility`),
+  setParticipantPassword: (id, password) => apiClient.patch(`/admin/participant/${id}/password`, null, { params: { password } }),
+  addProblem: (data) => apiClient.post("/problems", data),
+  updateProblem: (id, data) => apiClient.put(`/problems/${id}`, data),
+  deleteProblem: (id) => apiClient.delete(`/problems/${id}`),
 };
 
 export default apiClient;
