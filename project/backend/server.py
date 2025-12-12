@@ -17,25 +17,30 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # --------------------------
-# Import Routers (AFTER app)
+# Import Routers (backend.app)
 # --------------------------
-from routes import router as core_router
-from contest.submit_router import router as submit_router
-from contest.problem_router import router as problem_router
-from contest.run_router import router as run_router   # <-- NEW router
-from contest.timer_router import router as timer_router  # type: ignore
+from backend.app.routers.status import router as api_status_router
+from backend.app.routers.auth import router as api_auth_router
+from backend.app.routers.contest import router as api_contest_router
+from backend.app.routers.admin import router as api_admin_router
+from backend.app.routers.timer import router as api_timer_router
+from backend.app.routers.problems import router as api_problems_router
+from backend.app.routers.compat import router as api_compat_router
 
-app.include_router(core_router)
-app.include_router(submit_router)
-app.include_router(problem_router)
-app.include_router(run_router)
-app.include_router(timer_router)
+app.include_router(api_status_router)
+app.include_router(api_auth_router)
+app.include_router(api_contest_router)
+app.include_router(api_admin_router)
+app.include_router(api_timer_router)
+app.include_router(api_problems_router)
+app.include_router(api_compat_router)
 
 
 # --------------------------
@@ -47,7 +52,10 @@ try:
 except Exception as _e:
     print(">>> Seed users init error:", _e)
 
-# Root
+@app.get("/health")
+def health():
+    return {"ok": True}
+
 @app.get("/")
 def root():
     return {"status": "ok"}

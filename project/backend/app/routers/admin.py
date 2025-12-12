@@ -3,6 +3,7 @@ from ..db import db
 from ..auth import get_current_user
 from ..models import ProblemCreate
 from typing import Optional
+import uuid
 
 router = APIRouter(prefix="/api")
 
@@ -10,7 +11,12 @@ router = APIRouter(prefix="/api")
 async def admin_participants(admin = Depends(get_current_user)):
     if admin.role != "admin":
         raise HTTPException(403)
-    return await db.participants.find({}).to_list(1000)
+    if not db:
+        return []
+    try:
+        return await db.participants.find({}).to_list(1000)
+    except Exception:
+        return []
 
 @router.get("/admin/participant/{participant_id}")
 async def admin_participant(participant_id: str, admin = Depends(get_current_user)):
@@ -94,3 +100,37 @@ async def delete_problem(pid: str, admin = Depends(get_current_user)):
         raise HTTPException(403)
     await db.problems.delete_one({"id": pid})
     return {"status": "deleted", "id": pid}
+@router.post("/admin/participant")
+async def admin_add_participant(name: str, email: str, password: Optional[str] = None, admin = Depends(get_current_user)):
+    if admin.role != "admin":
+        raise HTTPException(403)
+    if not db:
+        raise HTTPException(500, "DB not available")
+    e = email.lower()
+    existing = await db.participants.find_one({"email": e})
+    if existing:
+        # update name/password if provided
+        update = {"name": name}
+        if password:
+            update["password"] = password
+        await db.participants.update_one({"email": e}, {"$set": update})
+        p = await db.participants.find_one({"email": e})
+        return p
+    pid = str(uuid.uuid4())
+    doc = {
+        "id": pid,
+        "name": name,
+        "email": e,
+        "password": password,
+        "round1Attendance": False,
+        "round2Attendance": False,
+        "round1TestcasesPassed": 0,
+        "round1TotalTestcases": 0,
+        "round2TestcasesPassed": 0,
+        "round2TotalTestcases": 0,
+        "round1Timestamp": None,
+        "round2Timestamp": None,
+        "round2Eligible": False,
+    }
+    await db.participants.insert_one(doc)
+    return doc

@@ -71,7 +71,7 @@ export const ContestProvider = ({ children }) => {
       const payload = { code, language, customInput };
       const { data } = await api.runCode(payload);
 
-      if (!data?.success) {
+      if (!data || data.success === false) {
         return {
           success: false,
           output: data?.error || "Run failed",
@@ -79,11 +79,14 @@ export const ContestProvider = ({ children }) => {
       }
 
       const run = data.run || {};
+      const topOutput = typeof data.output === 'string' ? data.output : undefined;
+      const out = topOutput ?? (run.stdout || run.output || "");
+      const time = data.time ?? run.cpu_time ?? 0;
 
       return {
         success: true,
-        output: run.stdout || run.output || "",
-        executionTime: run.cpu_time || 0,
+        output: out,
+        executionTime: time,
       };
     } catch (err) {
       console.error("runCode error:", err);
@@ -102,24 +105,21 @@ export const ContestProvider = ({ children }) => {
       const payload = { userId, problemId, code, language, round: roundId };
       const { data } = await api.submitCode(payload);
 
-      if (!data?.success) {
-        return {
-          success: false,
-          message: data?.message || "Submission failed",
-        };
+      const isExplicitFailure = data && data.success === false;
+      if (isExplicitFailure) {
+        return { success: false, message: data?.message || "Submission failed" };
       }
 
-      // refresh submissions
+      const normalized = data?.result ?? data;
+
       const { data: subs } = await api.getUserSubmissions(userId);
       setSubmissions(subs || []);
+      await loadParticipants();
 
-      return { success: true, submission: data?.result };
+      return { success: true, submission: normalized };
     } catch (err) {
       console.error("submitCode error:", err);
-      return {
-        success: false,
-        message: err.message || "Submission error",
-      };
+      return { success: false, message: err.message || "Submission error" };
     }
   };
 
@@ -174,6 +174,16 @@ export const ContestProvider = ({ children }) => {
     }
   };
 
+  const addParticipant = async (name, email, password) => {
+    try {
+      await api.addParticipant(name, email, password);
+      await loadParticipants();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err?.message || 'Add participant failed' };
+    }
+  };
+
   const toggleEligibility = async (participantId) => {
     try {
       const { data } = await api.toggleEligibility(participantId);
@@ -207,11 +217,13 @@ export const ContestProvider = ({ children }) => {
         participants,
         submissions,
         toggleEligibility,
+        addParticipant,
+        loadParticipants,
         getRoundInfo,
-      updateRoundStatus,
-      startRound,
-      lockRound,
-      unlockRound,
+        updateRoundStatus,
+        startRound,
+        lockRound,
+        unlockRound,
       refreshRoundWindow,
       runCode,
       submitCode,

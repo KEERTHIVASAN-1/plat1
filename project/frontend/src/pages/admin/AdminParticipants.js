@@ -11,10 +11,25 @@ import { ArrowLeft, Search, CheckCircle2, XCircle, Eye } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 
 const AdminParticipants = () => {
-  const { participants, toggleEligibility } = useContest();
+  const { participants, toggleEligibility, addParticipant } = useContest();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const handleAdd = async () => {
+    if (adding) return; setAdding(true);
+    try {
+      const ok = await addParticipant(newName.trim(), newEmail.trim(), newPassword.trim() || undefined);
+      if (!ok?.success) throw new Error(ok?.message || 'Add failed');
+      setNewName(''); setNewEmail(''); setNewPassword('');
+    } catch (e) {
+      console.error('Add participant error:', e);
+    } finally { setAdding(false); }
+  };
 
   const filteredParticipants = participants
     .filter(p => 
@@ -45,6 +60,19 @@ const AdminParticipants = () => {
             </div>
           </div>
         </div>
+
+        {/* Add Participant */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Add Participant</CardTitle>
+          </CardHeader>
+          <CardContent className="grid md:grid-cols-4 gap-3">
+            <Input placeholder="Name" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <Input placeholder="Email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+            <Input placeholder="Password (optional)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+            <Button onClick={handleAdd} disabled={adding}>Add</Button>
+          </CardContent>
+        </Card>
 
         {/* Search & Filters */}
         <Card>
@@ -85,6 +113,7 @@ const AdminParticipants = () => {
                     <TableHead>Email</TableHead>
                     <TableHead className="text-center">Round 1</TableHead>
                     <TableHead className="text-center">R1 Score</TableHead>
+                    <TableHead className="text-center">R1 Completed</TableHead>
                     <TableHead className="text-center">Round 2 Eligible</TableHead>
                     <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
@@ -110,6 +139,11 @@ const AdminParticipants = () => {
                       <TableCell className="text-center">
                         <span className="font-medium">
                           {participant.round1TestcasesPassed}/{participant.round1TotalTestcases}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="text-sm">
+                          {participant.round1ProblemsCompleted || 0}
                         </span>
                       </TableCell>
                       <TableCell className="text-center">

@@ -42,9 +42,11 @@ const CodingPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [previewOpen, setPreviewOpen] = useState([]);
   const [previewHiddenCount, setPreviewHiddenCount] = useState(0);
+  const [saveStatus, setSaveStatus] = useState('');
   
 
   const problemsRef = useRef(problems);
+  const saveTimerRef = useRef(null);
 
   // Fetch problems from backend
   useEffect(() => {
@@ -80,6 +82,43 @@ const CodingPage = () => {
     }
   }, [language]);
 
+  const storageKey = (pid, lang) => `code:${roundId}:${pid}:${lang}`;
+
+  useEffect(() => {
+    if (!selectedProblemId) return;
+    const key = storageKey(selectedProblemId, language);
+    const saved = localStorage.getItem(key);
+    if (saved !== null) {
+      setCode(saved);
+      setSaveStatus('Saved');
+    } else {
+      const template = languageOptions.find(l => l.value === language)?.template || '';
+      setCode(template);
+      setSaveStatus('');
+    }
+  }, [selectedProblemId]);
+
+  useEffect(() => {
+    if (!selectedProblemId) return;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    setSaveStatus('Saving…');
+    saveTimerRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(storageKey(selectedProblemId, language), code || '');
+      } catch (_) {}
+      setSaveStatus('Saved');
+    }, 500);
+  }, [code, selectedProblemId, language]);
+
+  const handleResetTemplate = () => {
+    const t = languageOptions.find(l => l.value === language)?.template || '';
+    try { localStorage.removeItem(storageKey(selectedProblemId, language)); } catch (_) {}
+    setCode(t);
+    setSaveStatus('');
+  };
+
   
 
   const handleRun = async () => {
@@ -99,7 +138,9 @@ const CodingPage = () => {
         const expected = (tc.output || '').replace(/\r/g, '').trim();
         const runRes = await runCode(code, language, stdin);
         const actual = ((runRes && runRes.output) || '').replace(/\r/g, '').trim();
-        const passed = (runRes && runRes.success) && actual === expected;
+        const actualNorm = actual.replace(/\s+/g, ' ').trim();
+        const expectedNorm = expected.replace(/\s+/g, ' ').trim();
+        const passed = (runRes && runRes.success) && actualNorm === expectedNorm;
         results.push({
           testcase: `Test Case ${i + 1}`,
           input: stdin,
@@ -183,6 +224,7 @@ const CodingPage = () => {
     if (!currentProblem) {
       setPreviewOpen([]);
       setPreviewHiddenCount(0);
+      setTestcaseResults([]);
       return;
     }
     const tcs = Array.isArray(currentProblem.testcases) ? currentProblem.testcases.slice(0, 6) : [];
@@ -194,6 +236,13 @@ const CodingPage = () => {
     setPreviewOpen(open);
     setPreviewHiddenCount(hidden > 0 ? hidden : 0);
   }, [currentProblem]);
+
+  useEffect(() => {
+    // clear results when switching problem id explicitly
+    setTestcaseResults([]);
+    setRunOutput('');
+    setCustomInput('');
+  }, [selectedProblemId]);
 
   const secondsLeft = roundData?.remaining || 0;
 
@@ -299,17 +348,19 @@ const CodingPage = () => {
                 </SelectContent>
               </Select>
             </div>
-
-            
+            <div className="flex items-center space-x-3">
+              <span className="text-xs text-gray-300">{saveStatus}</span>
+              <Button variant="outline" size="sm" onClick={handleResetTemplate}>Reset to template</Button>
+            </div>
           </div>
 
           <div className="flex-1">
             {lockedOrNotStarted ? (
               <div className="h-full flex items-center justify-center text-gray-300">Round not started</div>
-            ) : (
-              <CodeEditor value={code} onChange={setCode} language={language} />
-            )}
-          </div>
+          ) : (
+              <CodeEditor key={selectedProblemId || 'editor'} value={code} onChange={setCode} language={language} />
+          )}
+        </div>
 
           <div className="bg-gray-800 border-t p-3">
             <div className="flex items-start space-x-3">
@@ -346,7 +397,7 @@ const CodingPage = () => {
               {lockedOrNotStarted ? (
                 <div className="text-sm text-gray-500 text-center py-8">Round not started</div>
               ) : (
-                <TestcaseResults results={testcaseResults} previewOpen={previewOpen} previewHiddenCount={previewHiddenCount} />
+                <TestcaseResults key={selectedProblemId || 'tcs'} results={testcaseResults} previewOpen={previewOpen} previewHiddenCount={previewHiddenCount} />
               )}
             </TabsContent>
           </Tabs>

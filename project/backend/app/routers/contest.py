@@ -127,7 +127,9 @@ async def submit(req: SubmitRequest, current_user: UserOut = Depends(get_current
             continue
         run = data.get("run", {})
         stdout = (run.get("output", "") or run.get("stdout", "") or "").replace("\r", "").strip()
-        ok = (stdout == expected and run.get("code", 0) == 0)
+        stdout_norm = " ".join(stdout.split())
+        expected_norm = " ".join(expected.split())
+        ok = (stdout_norm == expected_norm and run.get("code", 0) == 0)
         if ok:
             passed += 1
         results.append({
@@ -140,7 +142,7 @@ async def submit(req: SubmitRequest, current_user: UserOut = Depends(get_current
         await asyncio.sleep(0.01)
 
     fully_passed = (passed == total)
-    stored_code = req.code if (req.round != "round1" or fully_passed) else ""
+    stored_code = req.code
 
     sid = "s" + str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -159,24 +161,42 @@ async def submit(req: SubmitRequest, current_user: UserOut = Depends(get_current
     }
     await db.submissions.insert_one(submission_doc)
 
-    # update participant and user stats
+    # update participant and user stats (aggregate across problems)
+    # compute per-problem best pass counts and completed problems for the round
+    agg = []
+    cursor = db.submissions.find({"userId": req.userId, "round": req.round}, {"problemId": 1, "testcasesPassed": 1, "totalTestcases": 1, "_id": 0})
+    subs = await cursor.to_list(1000)
+    best_by_problem = {}
+    totals_by_problem = {}
+    for s in subs:
+        pid = s.get("problemId")
+        tc_passed = int(s.get("testcasesPassed", 0))
+        tc_total = int(s.get("totalTestcases", 0))
+        best_by_problem[pid] = max(best_by_problem.get(pid, 0), tc_passed)
+        totals_by_problem[pid] = tc_total  # assume constant per problem
+    total_testcases = sum(totals_by_problem.values())
+    total_passed = sum(best_by_problem.values())
+    problems_completed = sum(1 for pid, best in best_by_problem.items() if best >= (totals_by_problem.get(pid, 0) or 0))
+
     if req.round == "round1":
         await db.participants.update_one({"id": req.userId}, {"$set": {
             "round1Attendance": True,
-            "round1TestcasesPassed": passed,
-            "round1TotalTestcases": total,
+            "round1TestcasesPassed": total_passed,
+            "round1TotalTestcases": total_testcases,
+            "round1ProblemsCompleted": problems_completed,
             "round1Timestamp": timestamp,
-            "round2Eligible": fully_passed
-        }})
-        await db.users.update_one({"id": req.userId}, {"$set": {"round1Score": passed}})
+            "round2Eligible": fully_passed or (problems_completed >= 3)
+        }}, upsert=True)
+        await db.users.update_one({"id": req.userId}, {"$set": {"round1Score": total_passed}})
     else:
         await db.participants.update_one({"id": req.userId}, {"$set": {
             "round2Attendance": True,
-            "round2TestcasesPassed": passed,
-            "round2TotalTestcases": total,
+            "round2TestcasesPassed": total_passed,
+            "round2TotalTestcases": total_testcases,
+            "round2ProblemsCompleted": problems_completed,
             "round2Timestamp": timestamp
-        }})
-        await db.users.update_one({"id": req.userId}, {"$set": {"round2Score": passed}})
+        }}, upsert=True)
+        await db.users.update_one({"id": req.userId}, {"$set": {"round2Score": total_passed}})
 
     # return response
     from ..models import SubmissionOut as SO
