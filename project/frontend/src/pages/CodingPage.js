@@ -82,7 +82,9 @@ const CodingPage = () => {
     }
   }, [language]);
 
-  const storageKey = (pid, lang) => `code:${roundId}:${pid}:${lang}`;
+  const storageKey = (pid, lang) =>
+  `code:${user?.id}:${roundId}:${pid}:${lang}`;
+
 
   useEffect(() => {
     if (!selectedProblemId) return;
@@ -96,7 +98,7 @@ const CodingPage = () => {
       setCode(template);
       setSaveStatus('');
     }
-  }, [selectedProblemId]);
+  }, [selectedProblemId, language, user?.id]);
 
   useEffect(() => {
     if (!selectedProblemId) return;
@@ -110,7 +112,8 @@ const CodingPage = () => {
       } catch (_) {}
       setSaveStatus('Saved');
     }, 500);
-  }, [code, selectedProblemId, language]);
+  }, [code, selectedProblemId, language, user?.id]);
+
 
   const handleResetTemplate = () => {
     const t = languageOptions.find(l => l.value === language)?.template || '';

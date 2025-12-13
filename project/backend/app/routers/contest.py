@@ -157,7 +157,9 @@ async def submit(
         raise HTTPException(404, "Problem not found")
 
     testcases = prob.get("testcases", [])
-    total = len(testcases)
+    TOTAL_R1_TESTCASES = 18
+    total = TOTAL_R1_TESTCASES
+
     passed = 0
     results = []
 
@@ -206,6 +208,23 @@ async def submit(
     }
 
     await db.submissions.insert_one(submission_doc)
+    # 🔴 UPDATE PARTICIPANT ROUND-1 STATUS
+    await db.participants.update_one(
+    {"id": req.userId},
+    {
+        "$set": {
+            "round1Attendance": True,
+            "round1TotalTestcases": 18,   # FIXED VALUE
+        },
+        "$inc": {
+            "round1TestcasesPassed": passed,
+        }
+    }
+)
+
+
+
+    
 
     return SubmissionOut(
         id=sid,

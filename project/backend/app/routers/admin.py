@@ -20,11 +20,57 @@ async def admin_participants(admin=Depends(get_current_user)):
     if db is None:
         return []
 
-    try:
-        items = await db.participants.find({}, {"_id": 0}).to_list(1000)
-        return items
-    except Exception:
-        return []
+    # 1. Load all participants
+    participants = await db.participants.find({}, {"_id": 0}).to_list(1000)
+
+    # 2. Load round-1 problems and compute total testcases (3 × 6 = 18)
+    round1_problems = await db.problems.find(
+        {"round": "round1"},
+        {"_id": 0, "totalTestcases": 1}
+    ).to_list(100)
+
+    round1_total_testcases = sum(
+        p.get("totalTestcases", 0) for p in round1_problems
+    )
+
+    # 3. Aggregate submissions per participant
+    for p in participants:
+        user_id = p.get("id")
+        if not user_id:
+            continue
+
+        submissions = await db.submissions.find(
+            {"userId": user_id, "round": "round1"},
+            {"_id": 0}
+        ).to_list(1000)
+
+        # Attendance
+        p["round1Attendance"] = len(submissions) > 0
+
+        # Best submission per problem
+        best_per_problem = {}
+        for s in submissions:
+            pid = s["problemId"]
+            if (
+                pid not in best_per_problem
+                or s["testcasesPassed"] > best_per_problem[pid]["testcasesPassed"]
+            ):
+                best_per_problem[pid] = s
+
+        # Aggregate scores
+        passed = 0
+        completed = 0
+        for s in best_per_problem.values():
+            passed += s.get("testcasesPassed", 0)
+            if s.get("testcasesPassed", 0) == s.get("totalTestcases", 0):
+                completed += 1
+
+        p["round1TestcasesPassed"] = passed
+        p["round1TotalTestcases"] = round1_total_testcases
+        p["round1ProblemsCompleted"] = completed
+
+    return participants
+
 
 
 @router.get("/admin/participant/{participant_id}")
