@@ -11,8 +11,9 @@ import { ArrowLeft, Search, CheckCircle2, XCircle, Eye } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 
 const AdminParticipants = () => {
-  const { participants, toggleEligibility, addParticipant } = useContest();
+  const { participants = [], toggleEligibility, addParticipant } = useContest();
   const navigate = useNavigate();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [newName, setNewName] = useState('');
@@ -21,47 +22,54 @@ const AdminParticipants = () => {
   const [adding, setAdding] = useState(false);
 
   const handleAdd = async () => {
-    if (adding) return; setAdding(true);
+    if (adding) return;
+    setAdding(true);
     try {
-      const ok = await addParticipant(newName.trim(), newEmail.trim(), newPassword.trim() || undefined);
-      if (!ok?.success) throw new Error(ok?.message || 'Add failed');
-      setNewName(''); setNewEmail(''); setNewPassword('');
+      await addParticipant(
+        newName.trim(),
+        newEmail.trim(),
+        newPassword.trim() || undefined
+      );
+      setNewName('');
+      setNewEmail('');
+      setNewPassword('');
     } catch (e) {
       console.error('Add participant error:', e);
-    } finally { setAdding(false); }
+    } finally {
+      setAdding(false);
+    }
   };
 
   const filteredParticipants = participants
-    .filter(p => 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.email.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter((p) => {
+      const name = String(p?.name || '').toLowerCase();
+      const email = String(p?.email || '').toLowerCase();
+      const q = searchTerm.toLowerCase();
+      return name.includes(q) || email.includes(q);
+    })
     .sort((a, b) => {
-      if (sortBy === 'name') return a.name.localeCompare(b.name);
-      if (sortBy === 'score') return b.round1TestcasesPassed - a.round1TestcasesPassed;
+      if (sortBy === 'name') {
+        return String(a?.name || '').localeCompare(String(b?.name || ''));
+      }
+      if (sortBy === 'score') {
+        return (b?.round1TestcasesPassed || 0) - (a?.round1TestcasesPassed || 0);
+      }
       return 0;
     });
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      
+
       <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Button variant="outline" onClick={() => navigate('/admin')}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold">Participants Management</h1>
-              <p className="text-gray-600 text-sm">View and manage all registered participants</p>
-            </div>
-          </div>
+        <div className="flex items-center space-x-4">
+          <Button variant="outline" onClick={() => navigate('/admin')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          <h1 className="text-2xl font-bold">Participants Management</h1>
         </div>
 
-        {/* Add Participant */}
         <Card>
           <CardHeader>
             <CardTitle>Add Participant</CardTitle>
@@ -74,99 +82,88 @@ const AdminParticipants = () => {
           </CardContent>
         </Card>
 
-        {/* Search & Filters */}
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search by name or email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="name">Sort by Name</option>
-                <option value="score">Sort by Score</option>
-              </select>
+          <CardContent className="pt-6 flex gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                className="pl-10"
+                placeholder="Search by name or email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="border px-3 rounded"
+            >
+              <option value="name">Sort by Name</option>
+              <option value="score">Sort by Score</option>
+            </select>
           </CardContent>
         </Card>
 
-        {/* Participants Table */}
         <Card>
           <CardHeader>
             <CardTitle>All Participants ({filteredParticipants.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead className="text-center">Round 1</TableHead>
-                    <TableHead className="text-center">R1 Score</TableHead>
-                    <TableHead className="text-center">R1 Completed</TableHead>
-                    <TableHead className="text-center">Round 2 Eligible</TableHead>
-                    <TableHead className="text-center">Actions</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead className="text-center">Round 1</TableHead>
+                  <TableHead className="text-center">R1 Score</TableHead>
+                  <TableHead className="text-center">R1 Completed</TableHead>
+                  <TableHead className="text-center">Round 2 Eligible</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredParticipants.map((p, idx) => (
+                    <TableRow key={p.id || p.email || idx}>
+
+                    <TableCell>{p.name || '-'}</TableCell>
+                    <TableCell>{p.email || '-'}</TableCell>
+                    <TableCell className="text-center">
+                      {p.round1Attendance ? (
+                        <Badge className="bg-green-600">
+                          <CheckCircle2 className="h-3 w-3 mr-1" /> Attended
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          <XCircle className="h-3 w-3 mr-1" /> Absent
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {p.round1TestcasesPassed || 0}/{p.round1TotalTestcases || 0}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {p.round1ProblemsCompleted || 0}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Switch
+                        checked={!!p.round2Eligible}
+                        onCheckedChange={() => toggleEligibility(p.id)}
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate(`/admin/participant/${p.id}`)}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredParticipants.map((participant) => (
-                    <TableRow key={participant.id}>
-                      <TableCell className="font-medium">{participant.name}</TableCell>
-                      <TableCell>{participant.email}</TableCell>
-                      <TableCell className="text-center">
-                        {participant.round1Attendance ? (
-                          <Badge variant="default" className="bg-green-600">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Attended
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary">
-                            <XCircle className="h-3 w-3 mr-1" />
-                            Absent
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="font-medium">
-                          {participant.round1TestcasesPassed}/{participant.round1TotalTestcases}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="text-sm">
-                          {participant.round1ProblemsCompleted || 0}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Switch
-                          checked={participant.round2Eligible}
-                          onCheckedChange={() => toggleEligibility(participant.id)}
-                        />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/admin/participant/${participant.id}`)}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>

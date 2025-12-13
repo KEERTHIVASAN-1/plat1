@@ -40,20 +40,22 @@ apiClient.interceptors.response.use(
 );
 
 export const api = {
-  login: async (email, password) => {
-    const body = { email, password };
-    try { return await apiClient.post("/auth/login", body); } catch (e) {
-      if (e?.response?.status === 404) return apiClient.post("/api/auth/login", body);
-      throw e;
-    }
-  },
+ login: async (name, email) => {
+  return apiClient.post("/api/auth/login", {
+    name,
+    email,
+  });
+},
+
+
   register: async (name, email, password) => {
-    const body = { name, email, password };
-    try { return await apiClient.post("/auth/register", body); } catch (e) {
-      if (e?.response?.status === 404) return apiClient.post("/api/auth/register", body);
-      throw e;
-    }
-  },
+  return apiClient.post("/api/auth/register", {
+    name,
+    email,
+    password,
+  });
+},
+
 
   // contest
   getRoundWindow: async (roundId) => {
@@ -145,12 +147,15 @@ export const api = {
     }
   },
   addParticipant: async (name, email, password) => {
-    const params = { name, email };
-    if (password) params.password = password;
-    try { return await apiClient.post("/api/admin/participant", null, { params }); } catch (e) {
-      throw e;
-    }
-  },
+  return apiClient.post("/api/admin/participant", {
+    name,
+    email,
+    password,
+  });
+},
+
+
+
   getParticipant: async (id) => {
     try { return await apiClient.get(`/admin/participant/${id}`); } catch (e) {
       if (e?.response?.status === 404) return apiClient.get(`/api/admin/participant/${id}`);

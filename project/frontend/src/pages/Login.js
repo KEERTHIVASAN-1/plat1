@@ -22,7 +22,7 @@ const Login = () => {
     setError('');
     setLoading(true);
 
-    const result = await login(email.trim(), password.trim());
+    const result = await login(name.trim(), email.trim());
     
     if (result.success) {
       // Navigate based on role

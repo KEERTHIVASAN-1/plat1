@@ -9,8 +9,9 @@ class UserCreate(BaseModel):
     password: str
 
 class UserLogin(BaseModel):
+    name:str
     email: str
-    password: str
+
 
 class UserOut(BaseModel):
     id: str

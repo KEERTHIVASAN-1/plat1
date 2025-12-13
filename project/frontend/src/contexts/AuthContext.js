@@ -24,11 +24,11 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (name, email) => {
     try {
+      const n = (name || '').trim();
       const e = (email || '').trim();
-      const p = (password || '').trim();
-      const { data } = await api.login(e, p);
+      const { data } = await api.login(n, e);
       const userData = data?.user || null;
       const token = data?.access_token || null;
       if (userData && token) {

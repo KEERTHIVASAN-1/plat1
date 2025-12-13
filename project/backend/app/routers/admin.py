@@ -188,14 +188,13 @@ async def delete_problem(pid: str, admin=Depends(get_current_user)):
     return {"status": "deleted", "id": pid}
 
 # -------------------------------------------------------------------
-# ADD PARTICIPANT
+# -------------------------------------------------------------------
+# ADD PARTICIPANT  ✅ FIXED
 # -------------------------------------------------------------------
 
 @router.post("/admin/participant")
 async def admin_add_participant(
-    name: str,
-    email: str,
-    password: Optional[str] = None,
+    body: dict,
     admin=Depends(get_current_user),
 ):
     if admin.role != "admin":
@@ -204,28 +203,27 @@ async def admin_add_participant(
     if db is None:
         raise HTTPException(500, "DB not available")
 
-    e = email.lower()
+    name = body.get("name", "").strip()
+    email = body.get("email", "").lower().strip()
+    password = body.get("password")
 
-    existing = await db.participants.find_one({"email": e})
-    if existing is not None:
-        update = {"name": name}
-        if password:
-            update["password"] = password
+    if not name or not email:
+        raise HTTPException(400, "Name and email required")
 
+    existing = await db.participants.find_one({"email": email})
+    if existing:
         await db.participants.update_one(
-            {"email": e},
-            {"$set": update},
+            {"email": email},
+            {"$set": {"name": name}},
         )
-
-        p = await db.participants.find_one({"email": e}, {"_id": 0})
-        return p
+        return await db.participants.find_one({"email": email}, {"_id": 0})
 
     pid = str(uuid.uuid4())
     doc = {
         "id": pid,
         "name": name,
-        "email": e,
-        "password": password,
+        "email": email,
+        "password": password,  # optional
         "round1Attendance": False,
         "round2Attendance": False,
         "round1TestcasesPassed": 0,
@@ -238,4 +236,6 @@ async def admin_add_participant(
     }
 
     await db.participants.insert_one(doc)
+    doc.pop("_id", None)   # 🔴 REQUIRED
     return doc
+

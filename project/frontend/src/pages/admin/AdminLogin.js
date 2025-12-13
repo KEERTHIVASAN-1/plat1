@@ -21,7 +21,7 @@ const AdminLogin = () => {
     setError('');
     setLoading(true);
 
-    const result = await login(email.trim(), password.trim());
+    const result = await login('Admin', email.trim());
     
     if (result.success) {
       if (result.user.role === 'admin') {
